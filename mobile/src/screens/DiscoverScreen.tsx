@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -52,25 +53,68 @@ type Props = NativeStackScreenProps<
   "DiscoverMain"
 >;
 
+function normalizeSearchValue(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .trim();
+}
+
 export default function DiscoverScreen({ navigation }: Props) {
   const [activeFilter, setActiveFilter] =
     useState("For you");
+  const [searchQuery, setSearchQuery] =
+    useState("");
 
   const { isSaved, toggleWishlist } =
     useWishlist();
 
-  const visibleSections = recommendationSections
-    .filter(
-      (section) =>
-        activeFilter === "For you" ||
-        section.title === activeFilter
-    )
-    .map((section) => ({
-      ...section,
-      items: discoverItems.filter(
-        (item) => item.category === section.category
-      ),
-    }));
+  const normalizedQuery =
+    normalizeSearchValue(searchQuery);
+
+  const searchTerms = normalizedQuery
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const searchResults = discoverItems.filter((item) => {
+    const searchableText = normalizeSearchValue(
+      [
+        item.title,
+        item.location,
+        item.country,
+        item.category,
+        item.description,
+        item.note ?? "",
+        item.keywords.join(" "),
+      ].join(" ")
+    );
+
+    return searchTerms.every((term) =>
+      searchableText.includes(term)
+    );
+  });
+
+  const visibleSections = normalizedQuery
+    ? [
+        {
+          title: "Search results",
+          category: "SearchResults",
+          items: searchResults,
+        },
+      ]
+    : recommendationSections
+        .filter(
+          (section) =>
+            activeFilter === "For you" ||
+            section.title === activeFilter
+        )
+        .map((section) => ({
+          ...section,
+          items: discoverItems.filter(
+            (item) => item.category === section.category
+          ),
+        }));
 
   function openItem(item: DiscoverItem) {
     navigation.navigate(
@@ -91,6 +135,7 @@ export default function DiscoverScreen({ navigation }: Props) {
         contentContainerStyle={styles.content}
         bounces={false}
         overScrollMode="never"
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.logo}>
           ODYSSEUS
@@ -104,61 +149,109 @@ export default function DiscoverScreen({ navigation }: Props) {
           Find something worth travelling for.
         </Text>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filters}
-        >
-          {filters.map((filter) => {
-            const active =
-              activeFilter === filter;
+        <View style={styles.searchContainer}>
+          <Ionicons
+            name="search-outline"
+            size={19}
+            color="#777777"
+          />
 
-            return (
-              <TouchableOpacity
-                key={filter}
-                style={[
-                  styles.filter,
-                  active &&
-                    styles.filterActive,
-                ]}
-                onPress={() =>
-                  setActiveFilter(filter)
-                }
-              >
-                <Text
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+            placeholder="Search places, events, routes"
+            placeholderTextColor="#999999"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              style={styles.clearSearch}
+              onPress={() => setSearchQuery("")}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
+              <Ionicons
+                name="close-circle"
+                size={19}
+                color="#A0A0A0"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {!normalizedQuery && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filters}
+          >
+            {filters.map((filter) => {
+              const active =
+                activeFilter === filter;
+
+              return (
+                <TouchableOpacity
+                  key={filter}
                   style={[
-                    styles.filterText,
+                    styles.filter,
                     active &&
-                      styles.filterTextActive,
+                      styles.filterActive,
                   ]}
+                  onPress={() =>
+                    setActiveFilter(filter)
+                  }
                 >
-                  {filter}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                  <Text
+                    style={[
+                      styles.filterText,
+                      active &&
+                        styles.filterTextActive,
+                    ]}
+                  >
+                    {filter}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
 
         {visibleSections.map((section) => (
           <View
             key={section.category}
-            style={styles.section}
+            style={[
+              styles.section,
+              normalizedQuery && styles.searchSection,
+            ]}
           >
             <Text style={styles.sectionTitle}>
               {section.title}
             </Text>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.recommendations}
-              decelerationRate="fast"
-              snapToInterval={298}
-              snapToAlignment="start"
-              disableIntervalMomentum
-              nestedScrollEnabled
-            >
-              {section.items.map((item) => (
+            {normalizedQuery && (
+              <Text style={styles.resultCount}>
+                {section.items.length === 1
+                  ? "1 suggestion"
+                  : `${section.items.length} suggestions`}
+              </Text>
+            )}
+
+            {section.items.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.recommendations}
+                decelerationRate="fast"
+                snapToInterval={298}
+                snapToAlignment="start"
+                disableIntervalMomentum
+                nestedScrollEnabled
+              >
+                {section.items.map((item) => (
                 <TouchableOpacity
                   key={item.id}
                   style={styles.card}
@@ -217,8 +310,25 @@ export default function DiscoverScreen({ navigation }: Props) {
                     </View>
                   </View>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.emptySearch}>
+                <Ionicons
+                  name="search-outline"
+                  size={28}
+                  color="#A0A0A0"
+                />
+
+                <Text style={styles.emptySearchTitle}>
+                  No suggestions found
+                </Text>
+
+                <Text style={styles.emptySearchText}>
+                  Try a country, activity or event name.
+                </Text>
+              </View>
+            )}
           </View>
         ))}
       </ScrollView>
@@ -267,6 +377,33 @@ const styles = StyleSheet.create({
     color: "#777777",
   },
 
+  searchContainer: {
+    height: 48,
+    marginTop: 18,
+    marginHorizontal: 20,
+    paddingHorizontal: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E3E3E3",
+    borderRadius: 16,
+    backgroundColor: "#F8F8F8",
+  },
+
+  searchInput: {
+    flex: 1,
+    height: "100%",
+    marginLeft: 9,
+    paddingVertical: 0,
+    fontSize: 15,
+    color: "#111111",
+  },
+
+  clearSearch: {
+    paddingLeft: 9,
+    paddingVertical: 8,
+  },
+
   filters: {
     paddingHorizontal: 20,
 
@@ -309,12 +446,24 @@ const styles = StyleSheet.create({
     marginBottom: 26,
   },
 
+  searchSection: {
+    marginTop: 20,
+  },
+
   sectionTitle: {
     marginBottom: 12,
     paddingHorizontal: 20,
     fontSize: 22,
     fontWeight: "700",
     color: "#111111",
+  },
+
+  resultCount: {
+    marginTop: -7,
+    marginBottom: 12,
+    paddingHorizontal: 20,
+    fontSize: 13,
+    color: "#777777",
   },
 
   recommendations: {
@@ -417,5 +566,28 @@ const styles = StyleSheet.create({
     fontWeight: "600",
 
     color: "#111111",
+  },
+
+  emptySearch: {
+    marginHorizontal: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 34,
+    alignItems: "center",
+    borderRadius: 20,
+    backgroundColor: "#F7F7F7",
+  },
+
+  emptySearchTitle: {
+    marginTop: 10,
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#222222",
+  },
+
+  emptySearchText: {
+    marginTop: 5,
+    fontSize: 13,
+    color: "#777777",
+    textAlign: "center",
   },
 });

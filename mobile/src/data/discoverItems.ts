@@ -15,6 +15,7 @@ export type DiscoverItem = {
 
   description: string;
   note?: string;
+  keywords: string[];
 
   officialSiteUrl: string;
   ticketsUrl?: string;
@@ -43,6 +44,23 @@ export const discoverItems: DiscoverItem[] = [
 
     note:
       "For the most impressive lantern atmosphere, plan the visit after sunset. Some river activities and lantern releases cost extra.",
+
+    keywords: [
+      "lantern",
+      "lanterns",
+      "lantern festival",
+      "lights",
+      "night market",
+      "river",
+      "Hoi An",
+      "Vietnam",
+      "фонари",
+      "фонарики",
+      "лантерн",
+      "лантерны",
+      "фестиваль фонарей",
+      "Вьетнам",
+    ],
 
     officialSiteUrl:
       "https://hoianheritage.danang.gov.vn/en.html",
@@ -74,6 +92,19 @@ export const discoverItems: DiscoverItem[] = [
     note:
       "Flights depend heavily on weather and can be cancelled. Do not schedule the flight for the final morning of your trip.",
 
+    keywords: [
+      "balloon",
+      "balloons",
+      "hot air balloon",
+      "sunrise",
+      "flight",
+      "Cappadocia",
+      "Turkey",
+      "воздушный шар",
+      "Каппадокия",
+      "Турция",
+    ],
+
     officialSiteUrl:
       "https://cappadocia.goturkiye.com/",
     ticketsUrl:
@@ -104,6 +135,19 @@ export const discoverItems: DiscoverItem[] = [
     note:
       "Allow additional time if you want to walk around the entire lake or visit Bled Castle.",
 
+    keywords: [
+      "lake",
+      "island",
+      "castle",
+      "alps",
+      "nature",
+      "Bled",
+      "Slovenia",
+      "озеро",
+      "Блед",
+      "Словения",
+    ],
+
     officialSiteUrl:
       "https://www.bled.si/en/what-to-see-do/attractions/1/lake-bled/",
     mapsUrl:
@@ -132,6 +176,18 @@ export const discoverItems: DiscoverItem[] = [
     note:
       "The historic centre is compact but hilly. Comfortable shoes are useful.",
 
+    keywords: [
+      "rock houses",
+      "white village",
+      "architecture",
+      "Andalusia",
+      "Spain",
+      "Setenil",
+      "скалы",
+      "Андалусия",
+      "Испания",
+    ],
+
     officialSiteUrl:
       "https://www.setenildelasbodegas.es/en/areas2/tourism",
     mapsUrl:
@@ -159,6 +215,18 @@ export const discoverItems: DiscoverItem[] = [
 
     note:
       "Opening hours and queues can affect the route. Religious sites may require appropriate clothing.",
+
+    keywords: [
+      "one day",
+      "city route",
+      "mosque",
+      "Sultanahmet",
+      "Istanbul",
+      "Turkey",
+      "маршрут",
+      "Стамбул",
+      "Турция",
+    ],
 
     officialSiteUrl:
       "https://www.visit.istanbul/",
