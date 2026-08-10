@@ -44,22 +44,62 @@ export function isValidIsoDate(value: string) {
   return getDateParts(value) !== null;
 }
 
-export function formatDateInput(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 8);
+function datePartsToIso(day: string, month: string, year: string) {
+  const isoDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 
+  return isValidIsoDate(isoDate) ? isoDate : null;
+}
+
+function flexibleDateDigitsToIso(digits: string) {
   if (digits.length === 8 && Number(digits.slice(0, 4)) >= 1900) {
-    const year = digits.slice(0, 4);
-    const month = digits.slice(4, 6);
-    const day = digits.slice(6, 8);
-
-    return `${day}.${month}.${year}`;
+    return datePartsToIso(
+      digits.slice(6, 8),
+      digits.slice(4, 6),
+      digits.slice(0, 4)
+    );
   }
 
-  const day = digits.slice(0, 2);
-  const month = digits.slice(2, 4);
-  const year = digits.slice(4, 8);
+  const layouts: Array<[dayLength: number, monthLength: number]> =
+    digits.length === 8
+      ? [[2, 2]]
+      : digits.length === 7
+        ? [
+            [1, 2],
+            [2, 1],
+          ]
+        : digits.length === 6
+          ? [[1, 1]]
+          : [];
 
-  return [day, month, year].filter(Boolean).join(".");
+  for (const [dayLength, monthLength] of layouts) {
+    const day = digits.slice(0, dayLength);
+    const month = digits.slice(dayLength, dayLength + monthLength);
+    const year = digits.slice(dayLength + monthLength);
+    const isoDate = datePartsToIso(day, month, year);
+
+    if (isoDate) return isoDate;
+  }
+
+  return null;
+}
+
+export function formatDateInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  const isoDate = flexibleDateDigitsToIso(digits);
+
+  if (isoDate) {
+    const date = getDateParts(isoDate)!;
+
+    return `${String(date.day).padStart(2, "0")}.${String(
+      date.month
+    ).padStart(2, "0")}.${date.year}`;
+  }
+
+  if (digits.length === 8) {
+    return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
+  }
+
+  return digits;
 }
 
 export function isoDateToInput(value: string) {
@@ -77,31 +117,99 @@ export function dateInputToIso(value: string) {
 
   if (isValidIsoDate(trimmed)) return trimmed;
 
+  const separatedDate = /^(\d{1,2})\D+(\d{1,2})\D+(\d{4})$/.exec(trimmed);
+
+  if (separatedDate) {
+    return datePartsToIso(
+      separatedDate[1],
+      separatedDate[2],
+      separatedDate[3]
+    );
+  }
+
   const digits = trimmed.replace(/\D/g, "");
 
-  if (digits.length !== 8) return null;
+  return flexibleDateDigitsToIso(digits);
+}
 
-  const startsWithYear = Number(digits.slice(0, 4)) >= 1900;
-  const year = startsWithYear
-    ? digits.slice(0, 4)
-    : digits.slice(4, 8);
-  const month = startsWithYear
-    ? digits.slice(4, 6)
-    : digits.slice(2, 4);
-  const day = startsWithYear
-    ? digits.slice(6, 8)
-    : digits.slice(0, 2);
-  const isoDate = `${year}-${month}-${day}`;
+export function normalizeDateInput(value: string) {
+  const isoDate = dateInputToIso(value);
 
-  return isValidIsoDate(isoDate) ? isoDate : null;
+  return isoDate ? isoDateToInput(isoDate) : formatDateInput(value);
+}
+
+export function formatTimeInput(value: string) {
+  const sanitized = value.replace(/[^\d:]/g, "");
+  const colonIndex = sanitized.indexOf(":");
+
+  if (colonIndex >= 0) {
+    const hours = sanitized.slice(0, colonIndex).replace(/\D/g, "").slice(0, 2);
+    const minutes = sanitized
+      .slice(colonIndex + 1)
+      .replace(/\D/g, "")
+      .slice(0, 2);
+
+    return `${hours}:${minutes}`;
+  }
+
+  const digits = sanitized.replace(/\D/g, "").slice(0, 4);
+
+  if (digits.length <= 2) return digits;
+  if (digits.length === 3) return `0${digits[0]}:${digits.slice(1)}`;
+
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+export function timeInputTo24Hour(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) return null;
+
+  let hours: string;
+  let minutes: string;
+
+  if (trimmed.includes(":")) {
+    const match = /^(\d{1,2}):?(\d{0,2})$/.exec(trimmed);
+
+    if (!match) return null;
+
+    hours = match[1];
+    minutes = match[2] || "0";
+  } else {
+    const digits = trimmed.replace(/\D/g, "");
+
+    if (digits.length === 0 || digits.length > 4) return null;
+
+    if (digits.length <= 2) {
+      hours = digits;
+      minutes = "0";
+    } else if (digits.length === 3) {
+      hours = digits.slice(0, 1);
+      minutes = digits.slice(1);
+    } else {
+      hours = digits.slice(0, 2);
+      minutes = digits.slice(2);
+    }
+  }
+
+  const hourNumber = Number(hours);
+  const minuteNumber = Number(minutes);
+
+  if (hourNumber > 23 || minuteNumber > 59) return null;
+
+  return `${String(hourNumber).padStart(2, "0")}:${String(
+    minuteNumber
+  ).padStart(2, "0")}`;
+}
+
+export function normalizeTimeInput(value: string) {
+  return timeInputTo24Hour(value) ?? formatTimeInput(value);
 }
 
 export function isValidTime(value: string) {
-  const match = /^(\d{2}):(\d{2})$/.exec(value.trim());
+  const normalized = timeInputTo24Hour(value);
 
-  return Boolean(
-    match && Number(match[1]) <= 23 && Number(match[2]) <= 59
-  );
+  return normalized !== null;
 }
 
 export function formatTravelDate(value: string) {

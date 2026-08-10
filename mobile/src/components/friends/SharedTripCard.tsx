@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 
+import { getCountryFlagEmoji } from "../../data/travelCatalog";
 import type { SharedTrip } from "../../models/collaboration";
 import { formatSharedTripDates } from "../../utils/collaborationDates";
 
@@ -31,7 +32,9 @@ export default function SharedTripCard({
     >
       <View style={styles.header}>
         <View style={styles.locationIcon}>
-          <Ionicons name="paper-plane-outline" size={18} color="#765FD2" />
+          <Text style={styles.countryFlag}>
+            {getCountryFlagEmoji(trip.country)}
+          </Text>
         </View>
         <View style={styles.titleArea}>
           <Text style={styles.title}>{trip.title}</Text>
@@ -93,6 +96,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#EEE9FF",
   },
+  countryFlag: { fontSize: 21 },
   titleArea: { flex: 1, marginLeft: 11 },
   title: { fontSize: 17, fontWeight: "700", color: "#111111" },
   dates: { marginTop: 3, fontSize: 11, color: "#777077" },

@@ -285,9 +285,16 @@ export default function DiscoverScreen({ navigation }: Props) {
                   </TouchableOpacity>
 
                   <View style={styles.cardContent}>
-                    <Text style={styles.category}>
-                      {item.category.toUpperCase()}
-                    </Text>
+                    <View style={styles.categoryRow}>
+                      <Text style={styles.category}>
+                        {item.category.toUpperCase()}
+                      </Text>
+                      {item.isDemoData && (
+                        <View style={styles.demoBadge}>
+                          <Text style={styles.demoBadgeText}>DEMO</Text>
+                        </View>
+                      )}
+                    </View>
 
                     <Text style={styles.cardTitle}>
                       {item.title}
@@ -521,6 +528,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 
+  categoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+
   category: {
     fontSize: 10,
 
@@ -529,6 +542,20 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
 
     color: "#999999",
+  },
+
+  demoBadge: {
+    borderRadius: 7,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    backgroundColor: "#EEE9FF",
+  },
+
+  demoBadgeText: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    color: "#765FD2",
   },
 
   cardTitle: {

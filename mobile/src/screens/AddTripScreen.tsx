@@ -20,8 +20,9 @@ import type { ProfileStackParamList } from "../navigation/navigationTypes";
 type Props = NativeStackScreenProps<ProfileStackParamList, "AddTrip">;
 
 export default function AddTripScreen({ navigation, route }: Props) {
-  const { trips, addTrip, updateTrip } = useTravelData();
+  const { trips, addTrip, updateTrip, setTripSelectedPlaceIds } = useTravelData();
   const tripId = route.params?.tripId;
+  const initialPlaceId = route.params?.initialPlaceId;
   const existingTrip = tripId
     ? trips.find((trip) => trip.id === tripId)
     : undefined;
@@ -34,6 +35,11 @@ export default function AddTripScreen({ navigation, route }: Props) {
     }
 
     const trip = addTrip(input);
+
+    if (initialPlaceId) {
+      setTripSelectedPlaceIds(trip.id, [initialPlaceId]);
+    }
+
     navigation.replace("TripDetail", { tripId: trip.id });
   }
 
@@ -54,7 +60,7 @@ export default function AddTripScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <StackScreenHeader
         eyebrow="TRAVEL PLANNER"
-        title={existingTrip ? "Edit trip" : "Add trip"}
+        title={existingTrip ? "Edit trip" : "Create trip"}
         onBack={navigation.goBack}
       />
 
@@ -69,12 +75,12 @@ export default function AddTripScreen({ navigation, route }: Props) {
         >
           <Text style={styles.intro}>
             {existingTrip
-              ? "Update the essentials for this journey."
-              : "Keep dates, plans and flights together in one place."}
+              ? "Update the details and preferences for this journey."
+              : "Start with the essentials. Everything except destination and dates can be adjusted later."}
           </Text>
           <TripForm
             initialTrip={existingTrip}
-            submitLabel={existingTrip ? "Save changes" : "Save trip"}
+            submitLabel={existingTrip ? "Save changes" : "Create trip"}
             onSubmit={save}
           />
         </ScrollView>

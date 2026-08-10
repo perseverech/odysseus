@@ -4,8 +4,6 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTravelData } from "../../context/TravelDataContext";
-import { useWishlist } from "../../context/WishlistContext";
-import { discoverItems } from "../../data/discoverItems";
 import { formatTripDateRange } from "../../utils/travelDates";
 import ProfileSectionHeader from "./ProfileSectionHeader";
 
@@ -16,8 +14,6 @@ type Props = {
 
 export default function UpcomingTripsSection({ onAddTrip, onOpenTrip }: Props) {
   const { trips, flights } = useTravelData();
-  const { wishlist } = useWishlist();
-  const savedItems = discoverItems.filter((item) => wishlist.includes(item.id));
 
   return (
     <>
@@ -35,18 +31,12 @@ export default function UpcomingTripsSection({ onAddTrip, onOpenTrip }: Props) {
             (flight) =>
               flight.tripId === trip.id || trip.flightIds.includes(flight.id)
           ).length;
-          const savedPlacesCount = savedItems.filter(
-            (item) =>
-              item.category === "Place" &&
-              item.country.toLocaleLowerCase() ===
-                trip.destinationCountry.toLocaleLowerCase()
-          ).length;
-          const routePlanned = savedItems.some(
-            (item) =>
-              item.category === "Route" &&
-              item.country.toLocaleLowerCase() ===
-                trip.destinationCountry.toLocaleLowerCase()
+          const savedPlacesCount = trip.selectedPlaceIds.length;
+          const routeStopCount = (trip.routeDays ?? []).reduce(
+            (sum, day) => sum + day.stops.length,
+            0
           );
+          const routePlanned = routeStopCount > 0;
 
           return (
             <TouchableOpacity
@@ -103,7 +93,11 @@ export default function UpcomingTripsSection({ onAddTrip, onOpenTrip }: Props) {
                 />
                 <Fact
                   icon="map-outline"
-                  label={routePlanned ? "Route planned" : "Route not planned"}
+                  label={
+                    routePlanned
+                      ? `${routeStopCount} route stops`
+                      : "Route not planned"
+                  }
                   active={routePlanned}
                 />
               </View>

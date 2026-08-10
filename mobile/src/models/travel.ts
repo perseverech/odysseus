@@ -1,3 +1,5 @@
+import type { Place } from "./place";
+
 export const CONTINENTS = [
   "Europe",
   "Asia",
@@ -50,7 +52,68 @@ export type TravelHistoryTrip = {
   stopCount?: number;
 };
 
-export type TripStatus = "planned" | "booked";
+export type TripStatus =
+  | "planning"
+  | "planned"
+  | "booked"
+  | "completed";
+
+export type TripInterest =
+  | "architecture"
+  | "history"
+  | "food"
+  | "museums"
+  | "nature"
+  | "shopping"
+  | "nightlife"
+  | "views"
+  | "religious"
+  | "hidden_gems";
+
+export type TripPace = "relaxed" | "balanced" | "intensive";
+
+export type MaxTravelDistance = "central" | "moderate" | "anywhere";
+
+export type RouteTravelMode = "walk" | "transit";
+
+export type UnscheduledPlaceReason =
+  | "closed"
+  | "too_far"
+  | "not_enough_time"
+  | "budget"
+  | "missing_coordinates"
+  | "removed_manually";
+
+export type RouteStop = {
+  id: string;
+  placeId: string;
+  order: number;
+  arrivalTime: string;
+  departureTime: string;
+  visitMinutes: number;
+  travelMinutesFromPrevious: number;
+  travelDistanceKm?: number;
+  travelModeFromPrevious?: RouteTravelMode;
+  breakMinutesBefore?: number;
+  breakLabel?: string;
+  waitingMinutesBefore?: number;
+  waitingLabel?: string;
+  isPriority?: boolean;
+  estimatedCost: number;
+  currency: string;
+};
+
+export type RouteDay = {
+  id: string;
+  date: string;
+  dayNumber: number;
+  stops: RouteStop[];
+  totalVisitMinutes: number;
+  totalTravelMinutes: number;
+  walkingDistanceKm?: number;
+  estimatedCost: number;
+  currency: string;
+};
 
 export type Trip = {
   id: string;
@@ -59,8 +122,24 @@ export type Trip = {
   startDate: string;
   endDate: string;
   status: TripStatus;
+  budget?: number;
+  currency?: string;
+  dailyStartTime?: string;
+  dailyEndTime?: string;
+  interests?: TripInterest[];
+  pace?: TripPace;
+  maxTravelDistance?: MaxTravelDistance;
+  selectedPlaceIds: string[];
+  priorityPlaceIds: string[];
+  unscheduledPlaceIds: string[];
+  unscheduledPlaceReasons: Partial<
+    Record<string, UnscheduledPlaceReason>
+  >;
+  routeDays?: RouteDay[];
   notes?: string;
   flightIds: string[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Flight = {
@@ -85,7 +164,18 @@ export type Flight = {
   notes?: string;
 };
 
-export type CreateTripInput = Omit<Trip, "id" | "flightIds">;
+export type CreateTripInput = Omit<
+  Trip,
+  | "id"
+  | "flightIds"
+  | "selectedPlaceIds"
+  | "priorityPlaceIds"
+  | "unscheduledPlaceIds"
+  | "unscheduledPlaceReasons"
+  | "routeDays"
+  | "createdAt"
+  | "updatedAt"
+>;
 export type CreateFlightInput = Omit<Flight, "id">;
 export type UpdateTripInput = Partial<CreateTripInput>;
 export type UpdateFlightInput = CreateFlightInput;
@@ -97,6 +187,7 @@ export type TravelData = {
   tripHistory: TravelHistoryTrip[];
   upcomingTrips: Trip[];
   flights: Flight[];
+  customPlaces: Place[];
 };
 
 export type TravelStatistics = {

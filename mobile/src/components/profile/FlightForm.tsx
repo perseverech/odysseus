@@ -5,8 +5,11 @@ import type { CreateFlightInput, Flight, Trip } from "../../models/travel";
 import {
   dateInputToIso,
   formatDateInput,
+  formatTimeInput,
   isoDateToInput,
-  isValidTime,
+  normalizeDateInput,
+  normalizeTimeInput,
+  timeInputTo24Hour,
 } from "../../utils/travelDates";
 
 type Props = {
@@ -45,6 +48,7 @@ type FieldConfig = {
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   multiline?: boolean;
   dateInput?: boolean;
+  timeInput?: boolean;
 };
 
 const FLIGHT_FIELDS: FieldConfig[] = [
@@ -82,8 +86,9 @@ const DEPARTURE_FIELDS: FieldConfig[] = [
   {
     key: "departureTime",
     label: "Departure time",
-    placeholder: "HH:MM",
+    placeholder: "815 → 08:15",
     autoCapitalize: "none",
+    timeInput: true,
   },
 ];
 
@@ -112,8 +117,9 @@ const ARRIVAL_FIELDS: FieldConfig[] = [
   {
     key: "arrivalTime",
     label: "Arrival time",
-    placeholder: "HH:MM",
+    placeholder: "955 → 09:55",
     autoCapitalize: "none",
+    timeInput: true,
   },
 ];
 
@@ -254,14 +260,16 @@ export default function FlightForm({
     const arrivalDate = form.arrivalDate.trim()
       ? dateInputToIso(form.arrivalDate)
       : undefined;
+    const departureTime = timeInputTo24Hour(form.departureTime);
+    const arrivalTime = timeInputTo24Hour(form.arrivalTime);
 
     if (!departureDate || arrivalDate === null) {
-      setError("Enter a real date as DDMMYYYY, for example 17012027.");
+      setError("Enter a real date, for example 892026 or 17012027.");
       return;
     }
 
-    if (!isValidTime(form.departureTime) || !isValidTime(form.arrivalTime)) {
-      setError("Use 24-hour HH:MM for flight times.");
+    if (!departureTime || !arrivalTime) {
+      setError("Enter a real 24-hour time, for example 815 or 1830.");
       return;
     }
 
@@ -281,9 +289,9 @@ export default function FlightForm({
       arrivalAirport: form.arrivalAirport,
       arrivalIata: form.arrivalIata,
       departureDate,
-      departureTime: form.departureTime,
+      departureTime,
       arrivalDate,
-      arrivalTime: form.arrivalTime,
+      arrivalTime,
       terminal: form.terminal,
       gate: form.gate,
       seat: form.seat,
@@ -359,26 +367,46 @@ function FormSection({
             onChangeText={(value) =>
               onChange(
                 field.key,
-                field.dateInput ? formatDateInput(value) : value
+                field.dateInput
+                  ? formatDateInput(value)
+                  : field.timeInput
+                    ? formatTimeInput(value)
+                    : value
               )
             }
+            onBlur={() => {
+              if (field.dateInput) {
+                onChange(field.key, normalizeDateInput(form[field.key]));
+              } else if (field.timeInput) {
+                onChange(field.key, normalizeTimeInput(form[field.key]));
+              }
+            }}
             style={[styles.input, field.multiline && styles.multilineInput]}
             placeholder={field.placeholder}
             placeholderTextColor="#A0A0A0"
             autoCapitalize={field.autoCapitalize ?? "words"}
             autoCorrect={false}
-            keyboardType={field.dateInput ? "number-pad" : "default"}
+            keyboardType={
+              field.dateInput || field.timeInput ? "number-pad" : "default"
+            }
             maxLength={
               field.dateInput
                 ? 10
-                : field.maxLength ?? (field.multiline ? 400 : 100)
+                : field.timeInput
+                  ? 5
+                  : field.maxLength ?? (field.multiline ? 400 : 100)
             }
             multiline={field.multiline}
             textAlignVertical={field.multiline ? "top" : "center"}
           />
           {field.dateInput && (
             <Text style={styles.dateHint}>
-              Type 17012027 — separators appear automatically.
+              Type 892026 — it becomes 08.09.2026 automatically.
+            </Text>
+          )}
+          {field.timeInput && (
+            <Text style={styles.dateHint}>
+              Type 815 — it becomes 08:15 automatically.
             </Text>
           )}
         </View>

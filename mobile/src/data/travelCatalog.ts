@@ -65,6 +65,8 @@ const CONTINENT_BY_NAME: Record<string, Continent> = {
 const COUNTRY_CODE_BY_NAME: Record<string, string> = {
   france: "fr",
   norway: "no",
+  turkey: "tr",
+  türkiye: "tr",
 };
 
 const EU_CODES = new Set(
@@ -187,6 +189,12 @@ export function findCountryMetadataByName(
     return null;
   }
 
+  const aliasedCode = COUNTRY_CODE_BY_NAME[normalizedName];
+
+  if (aliasedCode) {
+    return countryCatalog.get(aliasedCode) ?? getCountryMetadata(aliasedCode);
+  }
+
   const countryByCode = countryCatalog.get(normalizedName);
 
   if (countryByCode) {
@@ -200,4 +208,18 @@ export function findCountryMetadataByName(
   }
 
   return null;
+}
+
+export function getCountryFlagEmoji(countryName: string) {
+  const countryCode = findCountryMetadataByName(countryName)?.id
+    .trim()
+    .toLocaleUpperCase();
+
+  if (!countryCode || !/^[A-Z]{2}$/.test(countryCode)) return "🌍";
+
+  return String.fromCodePoint(
+    ...Array.from(countryCode).map(
+      (letter) => 127397 + letter.charCodeAt(0)
+    )
+  );
 }

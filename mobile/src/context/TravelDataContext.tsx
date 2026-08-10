@@ -24,9 +24,12 @@ import type {
   TravelData,
   TravelHistoryTrip,
   Trip,
+  RouteDay,
+  UnscheduledPlaceReason,
   UpdateFlightInput,
   UpdateTripInput,
 } from "../models/travel";
+import type { CreatePlaceInput, Place } from "../models/place";
 import {
   asyncTravelStorage,
   type TravelStorage,
@@ -59,6 +62,7 @@ type TravelDataContextType = {
   dreamCountries: DreamCountry[];
   trips: Trip[];
   flights: Flight[];
+  customPlaces: Place[];
   visitedCountries: CountryVisit[];
   visitedCities: CityVisit[];
   visitedCountryCodes: string[];
@@ -70,6 +74,16 @@ type TravelDataContextType = {
   addTrip: (input: CreateTripInput) => Trip;
   updateTrip: (id: string, input: UpdateTripInput) => void;
   deleteTrip: (id: string) => void;
+  setTripSelectedPlaceIds: (id: string, placeIds: string[]) => void;
+  setTripRoutePlan: (
+    id: string,
+    routeDays: RouteDay[],
+    unscheduledPlaceIds?: string[],
+    unscheduledPlaceReasons?: Partial<Record<string, UnscheduledPlaceReason>>
+  ) => void;
+  setTripPriorityPlaceIds: (id: string, placeIds: string[]) => void;
+  addCustomPlace: (input: CreatePlaceInput) => Place;
+  deleteCustomPlace: (id: string) => void;
   addFlight: (input: CreateFlightInput) => Flight;
   updateFlight: (id: string, input: UpdateFlightInput) => void;
   deleteFlight: (id: string) => void;
@@ -100,11 +114,61 @@ function createDreamCountry(
   };
 }
 
+const tripStatuses = new Set<Trip["status"]>([
+  "planning",
+  "planned",
+  "booked",
+  "completed",
+]);
+
+function normalizeStoredTrip(trip: Partial<Trip>): Trip {
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+  const status = tripStatuses.has(trip.status ?? "planning")
+    ? trip.status ?? "planning"
+    : "planning";
+
+  return {
+    id: trip.id ?? `trip-migrated-${Date.now()}`,
+    destinationCity: trip.destinationCity?.trim() || "Untitled trip",
+    destinationCountry: trip.destinationCountry?.trim() || "",
+    startDate: trip.startDate?.trim() || today,
+    endDate: trip.endDate?.trim() || trip.startDate?.trim() || today,
+    status,
+    budget: typeof trip.budget === "number" ? trip.budget : undefined,
+    currency: trip.currency?.trim().toLocaleUpperCase() || "EUR",
+    dailyStartTime: trip.dailyStartTime?.trim() || "09:00",
+    dailyEndTime: trip.dailyEndTime?.trim() || "19:00",
+    interests: Array.isArray(trip.interests) ? trip.interests : [],
+    pace: trip.pace ?? "balanced",
+    maxTravelDistance: trip.maxTravelDistance ?? "moderate",
+    selectedPlaceIds: Array.isArray(trip.selectedPlaceIds)
+      ? Array.from(new Set(trip.selectedPlaceIds))
+      : [],
+    priorityPlaceIds: Array.isArray(trip.priorityPlaceIds)
+      ? Array.from(new Set(trip.priorityPlaceIds))
+      : [],
+    unscheduledPlaceIds: Array.isArray(trip.unscheduledPlaceIds)
+      ? Array.from(new Set(trip.unscheduledPlaceIds))
+      : [],
+    unscheduledPlaceReasons:
+      trip.unscheduledPlaceReasons &&
+      typeof trip.unscheduledPlaceReasons === "object"
+        ? trip.unscheduledPlaceReasons
+        : {},
+    routeDays: Array.isArray(trip.routeDays) ? trip.routeDays : undefined,
+    notes: trimmedOptional(trip.notes),
+    flightIds: Array.isArray(trip.flightIds) ? trip.flightIds : [],
+    createdAt: trip.createdAt ?? now,
+    updatedAt: trip.updatedAt ?? trip.createdAt ?? now,
+  };
+}
+
 function migrateLegacyTripToUpcoming(trip: LegacyTrip): Trip {
   const country = getCountryMetadata(trip.countryCodes[0] ?? "");
   const today = new Date().toISOString().slice(0, 10);
 
-  return {
+  return normalizeStoredTrip({
     id: trip.id,
     destinationCity: trip.cityNames[0] ?? trip.title,
     destinationCountry: country.name,
@@ -112,7 +176,7 @@ function migrateLegacyTripToUpcoming(trip: LegacyTrip): Trip {
     endDate: trip.endDate ?? trip.startDate ?? today,
     status: "planned",
     flightIds: [],
-  };
+  });
 }
 
 function migrateLegacyTripToHistory(
@@ -181,15 +245,18 @@ function migrateTravelData(value: unknown): TravelData {
         ? migratedTripHistory
         : fallback.tripHistory,
     upcomingTrips: Array.isArray(storedData.upcomingTrips)
-      ? storedData.upcomingTrips
+      ? storedData.upcomingTrips.map(normalizeStoredTrip)
       : legacyTrips.length > 0
         ? migratedUpcomingTrips
-        : fallback.upcomingTrips,
+        : fallback.upcomingTrips.map(normalizeStoredTrip),
     flights: Array.isArray(storedData.flights)
       ? storedData.flights
       : legacyTrips.length > 0
         ? []
         : fallback.flights,
+    customPlaces: Array.isArray(storedData.customPlaces)
+      ? storedData.customPlaces
+      : fallback.customPlaces,
   };
 }
 
@@ -400,19 +467,21 @@ export function TravelDataProvider({
   }
 
   function addTrip(input: CreateTripInput) {
-    const trip: Trip = {
+    const now = new Date().toISOString();
+    const trip = normalizeStoredTrip({
       ...input,
       id: `trip-${input.destinationCity
         .trim()
         .toLocaleLowerCase()
         .replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
-      destinationCity: input.destinationCity.trim(),
-      destinationCountry: input.destinationCountry.trim(),
-      startDate: input.startDate.trim(),
-      endDate: input.endDate.trim(),
-      notes: trimmedOptional(input.notes),
       flightIds: [],
-    };
+      selectedPlaceIds: [],
+      priorityPlaceIds: [],
+      unscheduledPlaceIds: [],
+      unscheduledPlaceReasons: {},
+      createdAt: now,
+      updatedAt: now,
+    });
 
     setTravelData((current) => ({
       ...current,
@@ -425,25 +494,173 @@ export function TravelDataProvider({
   function updateTrip(id: string, input: UpdateTripInput) {
     setTravelData((current) => ({
       ...current,
+      upcomingTrips: current.upcomingTrips.map((trip) => {
+        if (trip.id !== id) return trip;
+
+        const routeSettingsChanged =
+          (input.destinationCity !== undefined &&
+            input.destinationCity.trim() !== trip.destinationCity) ||
+          (input.destinationCountry !== undefined &&
+            input.destinationCountry.trim() !== trip.destinationCountry) ||
+          (input.startDate !== undefined && input.startDate !== trip.startDate) ||
+          (input.endDate !== undefined && input.endDate !== trip.endDate) ||
+          (input.currency !== undefined &&
+            input.currency.trim().toLocaleUpperCase() !== trip.currency) ||
+          (input.dailyStartTime !== undefined &&
+            input.dailyStartTime !== trip.dailyStartTime) ||
+          (input.dailyEndTime !== undefined &&
+            input.dailyEndTime !== trip.dailyEndTime) ||
+          (input.pace !== undefined && input.pace !== trip.pace) ||
+          (input.interests !== undefined &&
+            input.interests.join("|") !== (trip.interests ?? []).join("|")) ||
+          (input.maxTravelDistance !== undefined &&
+            input.maxTravelDistance !== trip.maxTravelDistance);
+
+        return normalizeStoredTrip({
+          ...trip,
+          ...input,
+          id: trip.id,
+          flightIds: trip.flightIds,
+          selectedPlaceIds: trip.selectedPlaceIds,
+          priorityPlaceIds: trip.priorityPlaceIds,
+          unscheduledPlaceIds: routeSettingsChanged
+            ? []
+            : trip.unscheduledPlaceIds,
+          unscheduledPlaceReasons: routeSettingsChanged
+            ? {}
+            : trip.unscheduledPlaceReasons,
+          routeDays: routeSettingsChanged ? undefined : trip.routeDays,
+          createdAt: trip.createdAt,
+          updatedAt: new Date().toISOString(),
+        });
+      }),
+    }));
+  }
+
+  function setTripSelectedPlaceIds(id: string, placeIds: string[]) {
+    const selectedPlaceIds = Array.from(new Set(placeIds));
+
+    setTravelData((current) => ({
+      ...current,
       upcomingTrips: current.upcomingTrips.map((trip) =>
         trip.id === id
           ? {
               ...trip,
-              ...input,
-              destinationCity:
-                input.destinationCity?.trim() ?? trip.destinationCity,
-              destinationCountry:
-                input.destinationCountry?.trim() ??
-                trip.destinationCountry,
-              startDate: input.startDate?.trim() ?? trip.startDate,
-              endDate: input.endDate?.trim() ?? trip.endDate,
-              notes:
-                input.notes === undefined
-                  ? trip.notes
-                  : trimmedOptional(input.notes),
+              selectedPlaceIds,
+              priorityPlaceIds: trip.priorityPlaceIds.filter((placeId) =>
+                selectedPlaceIds.includes(placeId)
+              ),
+              unscheduledPlaceIds: [],
+              unscheduledPlaceReasons: {},
+              routeDays: undefined,
+              updatedAt: new Date().toISOString(),
             }
           : trip
       ),
+    }));
+  }
+
+  function setTripRoutePlan(
+    id: string,
+    routeDays: RouteDay[],
+    unscheduledPlaceIds: string[] = [],
+    unscheduledPlaceReasons: Partial<
+      Record<string, UnscheduledPlaceReason>
+    > = {}
+  ) {
+    setTravelData((current) => ({
+      ...current,
+      upcomingTrips: current.upcomingTrips.map((trip) =>
+        trip.id === id
+          ? {
+              ...trip,
+              routeDays,
+              unscheduledPlaceIds: Array.from(
+                new Set(unscheduledPlaceIds)
+              ),
+              unscheduledPlaceReasons,
+              status: trip.status === "planning" ? "planned" : trip.status,
+              updatedAt: new Date().toISOString(),
+            }
+          : trip
+      ),
+    }));
+  }
+
+  function setTripPriorityPlaceIds(id: string, placeIds: string[]) {
+    setTravelData((current) => ({
+      ...current,
+      upcomingTrips: current.upcomingTrips.map((trip) =>
+        trip.id === id
+          ? {
+              ...trip,
+              priorityPlaceIds: Array.from(new Set(placeIds)).filter(
+                (placeId) => trip.selectedPlaceIds.includes(placeId)
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          : trip
+      ),
+    }));
+  }
+
+  function addCustomPlace(input: CreatePlaceInput) {
+    const now = new Date().toISOString();
+    const place: Place = {
+      ...input,
+      id: `place-${input.name
+        .trim()
+        .toLocaleLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
+      name: input.name.trim(),
+      city: input.city.trim(),
+      country: input.country.trim(),
+      address: trimmedOptional(input.address),
+      category: input.category.trim().toLocaleLowerCase(),
+      description: trimmedOptional(input.description),
+      currency:
+        trimmedOptional(input.currency)?.toLocaleUpperCase() ?? "EUR",
+      notes: trimmedOptional(input.notes),
+      source: "manual",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    setTravelData((current) => ({
+      ...current,
+      customPlaces: [...current.customPlaces, place],
+    }));
+
+    return place;
+  }
+
+  function deleteCustomPlace(id: string) {
+    setTravelData((current) => ({
+      ...current,
+      customPlaces: current.customPlaces.filter((place) => place.id !== id),
+      upcomingTrips: current.upcomingTrips.map((trip) => {
+        const usedByTrip = trip.selectedPlaceIds.includes(id);
+
+        return {
+          ...trip,
+          selectedPlaceIds: trip.selectedPlaceIds.filter(
+            (placeId) => placeId !== id
+          ),
+          priorityPlaceIds: trip.priorityPlaceIds.filter(
+            (placeId) => placeId !== id
+          ),
+          unscheduledPlaceIds: trip.unscheduledPlaceIds.filter(
+            (placeId) => placeId !== id
+          ),
+          unscheduledPlaceReasons: Object.fromEntries(
+            Object.entries(trip.unscheduledPlaceReasons).filter(
+              ([placeId]) => placeId !== id
+            )
+          ),
+          routeDays: usedByTrip ? undefined : trip.routeDays,
+          updatedAt: usedByTrip ? new Date().toISOString() : trip.updatedAt,
+        };
+      }),
     }));
   }
 
@@ -531,6 +748,7 @@ export function TravelDataProvider({
         dreamCountries: travelData.dreamCountries,
         trips: travelData.upcomingTrips,
         flights: travelData.flights,
+        customPlaces: travelData.customPlaces,
         visitedCountries: travelData.countryVisits,
         visitedCities: travelData.cityVisits,
         visitedCountryCodes,
@@ -542,6 +760,11 @@ export function TravelDataProvider({
         addTrip,
         updateTrip,
         deleteTrip,
+        setTripSelectedPlaceIds,
+        setTripRoutePlan,
+        setTripPriorityPlaceIds,
+        addCustomPlace,
+        deleteCustomPlace,
         addFlight,
         updateFlight,
         deleteFlight,

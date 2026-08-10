@@ -23,8 +23,15 @@ export type ProfileStackParamList = {
   AddTrip:
     | {
         tripId?: string;
+        initialPlaceId?: string;
       }
     | undefined;
+  TripPlaces: {
+    tripId: string;
+  };
+  AddCustomPlace: {
+    tripId: string;
+  };
   FlightDetail: {
     flightId: string;
   };

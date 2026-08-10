@@ -9,6 +9,7 @@ import {
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import WorldMap from "../components/WorldMap";
@@ -16,7 +17,10 @@ import StatsCarousel from "../components/StatsCarousel";
 import { useTravelData } from "../context/TravelDataContext";
 import worldGeoJson from "../data/world.json";
 import { useTravelStatistics } from "../hooks/useTravelStatistics";
+import type { RootTabParamList } from "../navigation/navigationTypes";
 import type { AiRouteLength } from "../services/aiRouteRecommendations";
+
+type Props = BottomTabScreenProps<RootTabParamList, "Home">;
 
 type WorldCountryFeature = {
   properties?: {
@@ -99,7 +103,7 @@ const destinations: RandomDestination[] = Array.from(
   .sort((first, second) => first.localeCompare(second))
   .map((country) => ({ country }));
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }: Props) {
   const screenScrollRef = useRef<ScrollView>(null);
   const mapOffsetRef = useRef(0);
   const {
@@ -304,7 +308,16 @@ export default function HomeScreen() {
         </Text>
 
         {tripsToPlan.map((trip) => (
-          <TouchableOpacity key={trip.id} style={styles.tripCard}>
+          <TouchableOpacity
+            key={trip.id}
+            style={styles.tripCard}
+            onPress={() =>
+              navigation.navigate("Profile", {
+                screen: "TripDetail",
+                params: { tripId: trip.id },
+              })
+            }
+          >
             <View>
               <Text style={styles.tripTitle}>
                 {trip.destinationCity}

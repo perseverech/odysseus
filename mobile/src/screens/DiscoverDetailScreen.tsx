@@ -1,8 +1,9 @@
-import React, { type ComponentProps } from "react";
+import React, { type ComponentProps, useState } from "react";
 
 import {
   Image,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,7 +20,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { discoverItems } from "../data/discoverItems";
 
 import { useWishlist } from "../context/WishlistContext";
+import { useTravelData } from "../context/TravelDataContext";
 import type { DiscoverStackParamList } from "../navigation/DiscoverStack";
+import type { RootTabParamList } from "../navigation/navigationTypes";
+import { formatTripDateRange } from "../utils/travelDates";
 
 type Props = NativeStackScreenProps<
   DiscoverStackParamList,
@@ -30,6 +35,7 @@ export default function DiscoverDetailScreen({
   navigation,
 }: Props) {
   const { itemId } = route.params;
+  const [tripModalVisible, setTripModalVisible] = useState(false);
 
   const item = discoverItems.find(
     (entry) => entry.id === itemId
@@ -37,6 +43,7 @@ export default function DiscoverDetailScreen({
 
   const { isSaved, toggleWishlist } =
     useWishlist();
+  const { trips, setTripSelectedPlaceIds } = useTravelData();
 
   if (!item) {
     return (
@@ -46,7 +53,42 @@ export default function DiscoverDetailScreen({
     );
   }
 
-  const saved = isSaved(item.id);
+  const discoverItemId = item.id;
+  const saved = isSaved(discoverItemId);
+  const availableTrips = trips.filter((trip) => trip.status !== "completed");
+  const addedTrips = availableTrips.filter((trip) =>
+    trip.selectedPlaceIds.includes(discoverItemId)
+  );
+  const addedLabel =
+    addedTrips.length === 1
+      ? `Added to ${addedTrips[0].destinationCity} ✓`
+      : addedTrips.length > 1
+        ? `Added to ${addedTrips.length} trips ✓`
+        : "Add to trip";
+
+  function addToTrip(tripId: string) {
+    const trip = trips.find((entry) => entry.id === tripId);
+
+    if (!trip) return;
+
+    setTripSelectedPlaceIds(trip.id, [
+      ...trip.selectedPlaceIds,
+      discoverItemId,
+    ]);
+    setTripModalVisible(false);
+  }
+
+  function createTripWithPlace() {
+    setTripModalVisible(false);
+    const tabNavigation = navigation.getParent<
+      BottomTabNavigationProp<RootTabParamList>
+    >();
+
+    tabNavigation?.navigate("Profile", {
+      screen: "AddTrip",
+      params: { initialPlaceId: discoverItemId },
+    });
+  }
 
   return (
     <View style={styles.screen}>
@@ -123,6 +165,20 @@ export default function DiscoverDetailScreen({
             </Text>
           </View>
 
+          {item.isDemoData && (
+            <View style={styles.demoNotice}>
+              <Ionicons
+                name="flask-outline"
+                size={17}
+                color="#765FD2"
+              />
+              <Text style={styles.demoNoticeText}>
+                Local demo data for testing. Prices, schedules and availability
+                are not live.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.infoGrid}>
             <Info
               icon="cash-outline"
@@ -191,6 +247,30 @@ export default function DiscoverDetailScreen({
 
           <TouchableOpacity
             style={[
+              styles.tripButton,
+              addedTrips.length > 0 && styles.tripButtonAdded,
+            ]}
+            onPress={() => setTripModalVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel={addedLabel}
+          >
+            <Ionicons
+              name={addedTrips.length > 0 ? "checkmark-circle" : "add-circle-outline"}
+              size={20}
+              color={addedTrips.length > 0 ? "#765FD2" : "#FFFFFF"}
+            />
+            <Text
+              style={[
+                styles.tripButtonText,
+                addedTrips.length > 0 && styles.tripButtonTextAdded,
+              ]}
+            >
+              {addedLabel}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
               styles.wishlistButton,
               saved &&
                 styles.wishlistButtonSaved,
@@ -247,6 +327,64 @@ export default function DiscoverDetailScreen({
           />
         </View>
       </ScrollView>
+
+      <Modal
+        visible={tripModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTripModalVisible(false)}
+      >
+        <View style={styles.modalRoot}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setTripModalVisible(false)}
+            accessibilityLabel="Close add to trip"
+          />
+          <SafeAreaView style={styles.tripSheet} edges={["bottom"]}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Add to trip</Text>
+            <Text style={styles.sheetSubtitle}>{item.title}</Text>
+
+            {availableTrips.length === 0 ? (
+              <View style={styles.noTripsCard}>
+                <Text style={styles.noTripsTitle}>No trips yet</Text>
+                <Text style={styles.noTripsText}>
+                  Create a trip first and this place will be added automatically.
+                </Text>
+              </View>
+            ) : (
+              availableTrips.map((trip) => {
+                const added = trip.selectedPlaceIds.includes(item.id);
+
+                return (
+                  <TouchableOpacity
+                    key={trip.id}
+                    style={styles.tripOption}
+                    onPress={() => addToTrip(trip.id)}
+                  >
+                    <View style={[styles.radio, added && styles.radioAdded]}>
+                      {added && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+                    </View>
+                    <View style={styles.tripOptionBody}>
+                      <Text style={styles.tripOptionCity}>{trip.destinationCity}</Text>
+                      <Text style={styles.tripOptionDates}>
+                        {formatTripDateRange(trip.startDate, trip.endDate)}
+                      </Text>
+                    </View>
+                    {added && <Text style={styles.addedText}>Added</Text>}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+
+            <TouchableOpacity style={styles.createTripButton} onPress={createTripWithPlace}>
+              <Ionicons name="add" size={18} color="#765FD2" />
+              <Text style={styles.createTripText}>Create new trip</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -416,6 +554,24 @@ const styles = StyleSheet.create({
     color: "#777777",
   },
 
+  demoNotice: {
+    marginTop: 16,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#F1EDFF",
+  },
+
+  demoNoticeText: {
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 15,
+    color: "#65558E",
+  },
+
   infoGrid: {
     marginTop: 25,
 
@@ -514,10 +670,37 @@ const styles = StyleSheet.create({
     color: "#666666",
   },
 
+  tripButton: {
+    height: 57,
+    marginTop: 28,
+    borderRadius: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    backgroundColor: "#765FD2",
+  },
+
+  tripButtonAdded: {
+    borderWidth: 1,
+    borderColor: "#D9CFF8",
+    backgroundColor: "#F0ECFF",
+  },
+
+  tripButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+
+  tripButtonTextAdded: {
+    color: "#765FD2",
+  },
+
   wishlistButton: {
     height: 57,
 
-    marginTop: 28,
+    marginTop: 10,
 
     borderRadius: 18,
 
@@ -576,5 +759,131 @@ const styles = StyleSheet.create({
     fontWeight: "600",
 
     color: "#111111",
+  },
+
+  modalRoot: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(18, 15, 22, 0.42)",
+  },
+
+  tripSheet: {
+    maxHeight: "78%",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 12,
+    backgroundColor: "#FFFFFF",
+  },
+
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    marginBottom: 17,
+    borderRadius: 2,
+    alignSelf: "center",
+    backgroundColor: "#D5D0D8",
+  },
+
+  sheetTitle: {
+    fontSize: 23,
+    fontWeight: "700",
+    color: "#151217",
+  },
+
+  sheetSubtitle: {
+    marginTop: 4,
+    marginBottom: 15,
+    fontSize: 12,
+    color: "#817985",
+  },
+
+  tripOption: {
+    minHeight: 70,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ECE8EF",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  radio: {
+    width: 23,
+    height: 23,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#AFA7B5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  radioAdded: {
+    borderColor: "#765FD2",
+    backgroundColor: "#765FD2",
+  },
+
+  tripOptionBody: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  tripOptionCity: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1D1920",
+  },
+
+  tripOptionDates: {
+    marginTop: 3,
+    fontSize: 10,
+    color: "#827A86",
+  },
+
+  addedText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#765FD2",
+  },
+
+  noTripsCard: {
+    borderRadius: 17,
+    padding: 15,
+    backgroundColor: "#F5F2FA",
+  },
+
+  noTripsTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2C2630",
+  },
+
+  noTripsText: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#817985",
+  },
+
+  createTripButton: {
+    height: 52,
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#D9CFF8",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: "#F5F2FF",
+  },
+
+  createTripText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#765FD2",
   },
 });

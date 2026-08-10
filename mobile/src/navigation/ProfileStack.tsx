@@ -4,9 +4,11 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import AddFlightScreen from "../screens/AddFlightScreen";
 import AddTripScreen from "../screens/AddTripScreen";
+import AddCustomPlaceScreen from "../screens/AddCustomPlaceScreen";
 import FlightDetailScreen from "../screens/FlightDetailScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import TripDetailScreen from "../screens/TripDetailScreen";
+import TripPlacesScreen from "../screens/TripPlacesScreen";
 import type { ProfileStackParamList } from "./navigationTypes";
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -30,6 +32,14 @@ export default function ProfileStack() {
       <Stack.Screen
         name="AddTrip"
         component={AddTripScreen}
+      />
+      <Stack.Screen
+        name="TripPlaces"
+        component={TripPlacesScreen}
+      />
+      <Stack.Screen
+        name="AddCustomPlace"
+        component={AddCustomPlaceScreen}
       />
       <Stack.Screen
         name="FlightDetail"

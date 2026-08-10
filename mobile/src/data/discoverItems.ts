@@ -1,3 +1,14 @@
+import { additionalDiscoverItems } from "./additionalDiscoverItems";
+import { focusedCityDiscoverItems } from "./focusedCityDiscoverItems";
+
+export type DiscoverPlaceData = {
+  latitude: number;
+  longitude: number;
+  estimatedVisitMinutes: number;
+  price?: number;
+  currency: string;
+};
+
 export type DiscoverItem = {
   id: string;
   category: "Experience" | "Place" | "Route";
@@ -20,9 +31,13 @@ export type DiscoverItem = {
   officialSiteUrl: string;
   ticketsUrl?: string;
   mapsUrl: string;
+  placeData?: DiscoverPlaceData;
+  placeCategory?: string;
+  isDemoData?: boolean;
 };
 
 export const discoverItems: DiscoverItem[] = [
+  ...focusedCityDiscoverItems,
   {
     id: "hoi-an-lanterns",
     category: "Experience",
@@ -235,4 +250,5 @@ export const discoverItems: DiscoverItem[] = [
     mapsUrl:
       "https://www.google.com/maps/search/?api=1&query=Sultanahmet+Istanbul",
   },
+  ...additionalDiscoverItems,
 ];
