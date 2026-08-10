@@ -13,11 +13,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import WorldMap from "../components/WorldMap";
 import StatsCarousel from "../components/StatsCarousel";
+import { useTravelData } from "../context/TravelDataContext";
 import worldGeoJson from "../data/world.json";
+import { useTravelStatistics } from "../hooks/useTravelStatistics";
 import type { AiRouteLength } from "../services/aiRouteRecommendations";
-
-console.log("WorldMap:", typeof WorldMap);
-console.log("StatsCarousel:", typeof StatsCarousel);
 
 type WorldCountryFeature = {
   properties?: {
@@ -103,13 +102,15 @@ const destinations: RandomDestination[] = Array.from(
 export default function HomeScreen() {
   const screenScrollRef = useRef<ScrollView>(null);
   const mapOffsetRef = useRef(0);
-  const [visitedCountries, setVisitedCountries] = useState([
-    "lv",
-    "tr",
-    "es",
-  ]);
-  const [plannedCountries, setPlannedCountries] =
-    useState<string[]>([]);
+  const {
+    travelData,
+    visitedCountryCodes,
+    dreamCountryCodes,
+    setVisitedCountryCodes,
+    setDreamCountryCodes,
+  } = useTravelData();
+  const statistics = useTravelStatistics();
+  const tripsToPlan = travelData.upcomingTrips;
 
   const [randomDestination, setRandomDestination] =
     useState<RandomDestination | null>(null);
@@ -157,17 +158,15 @@ export default function HomeScreen() {
           }}
         >
           <WorldMap
-            visitedCountries={visitedCountries}
-            plannedCountries={plannedCountries}
-            onVisitedCountriesChange={setVisitedCountries}
-            onPlannedCountriesChange={setPlannedCountries}
+            visitedCountries={visitedCountryCodes}
+            plannedCountries={dreamCountryCodes}
+            onVisitedCountriesChange={setVisitedCountryCodes}
+            onPlannedCountriesChange={setDreamCountryCodes}
             focusedCountryName={randomDestination?.country}
           />
         </View>
 
-        <StatsCarousel
-          visitedCountries={visitedCountries}
-        />
+        <StatsCarousel statistics={statistics} />
 
         <Text style={styles.question}>
           Where will your next journey be?
@@ -304,31 +303,24 @@ export default function HomeScreen() {
           Continue planning
         </Text>
 
-        <TouchableOpacity style={styles.tripCard}>
-          <View>
-            <Text style={styles.tripTitle}>Istanbul</Text>
-            <Text style={styles.tripSubtitle}>Turkey</Text>
-          </View>
+        {tripsToPlan.map((trip) => (
+          <TouchableOpacity key={trip.id} style={styles.tripCard}>
+            <View>
+              <Text style={styles.tripTitle}>
+                {trip.destinationCity}
+              </Text>
+              <Text style={styles.tripSubtitle}>
+                {trip.destinationCountry}
+              </Text>
+            </View>
 
-          <Ionicons
-            name="arrow-forward"
-            size={19}
-            color="#111111"
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.tripCard}>
-          <View>
-            <Text style={styles.tripTitle}>Barcelona</Text>
-            <Text style={styles.tripSubtitle}>Spain</Text>
-          </View>
-
-          <Ionicons
-            name="arrow-forward"
-            size={19}
-            color="#111111"
-          />
-        </TouchableOpacity>
+            <Ionicons
+              name="arrow-forward"
+              size={19}
+              color="#111111"
+            />
+          </TouchableOpacity>
+        ))}
       </ScrollView>
     </SafeAreaView>
   );

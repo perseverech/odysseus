@@ -28,6 +28,10 @@ import {
 } from "@maplibre/maplibre-react-native";
 
 import worldGeoJson from "../data/world.json";
+import {
+  getMapCountryId,
+  normalizeCountryName,
+} from "../data/travelCatalog";
 const sourceWorldData =
   worldGeoJson as unknown as CountryMapData;
 
@@ -128,10 +132,6 @@ const MAP_IMAGES = {
 const INITIAL_ZOOM = 1.2;
 const SMALL_COUNTRY_MAX_SPAN = 2;
 const SMALL_COUNTRY_HIT_RADIUS = 24;
-
-function normalizeCountryName(name: string) {
-  return name.trim().toLocaleLowerCase();
-}
 
 function getCountryFocusZoom(bounds: CountryBounds) {
   const longitudeSpan =
@@ -459,11 +459,10 @@ export default function WorldMap({
           properties.name ??
           "Unknown";
 
-        const normalizedIso = String(iso).toLowerCase();
-        const countryId =
-          normalizedIso && normalizedIso !== "-99"
-            ? normalizedIso
-            : `name:${normalizeCountryName(String(name))}`;
+        const countryId = getMapCountryId(
+          String(iso),
+          String(name)
+        );
 
         return {
           ...feature,

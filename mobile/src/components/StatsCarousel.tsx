@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -9,102 +9,18 @@ import {
   View,
 } from "react-native";
 
+import { CONTINENTS, type TravelStatistics } from "../models/travel";
+
 type Props = {
-  visitedCountries: string[];
+  statistics: TravelStatistics;
 };
 
-type CountryInfo = {
-  continent:
-    | "Europe"
-    | "Asia"
-    | "Africa"
-    | "North America"
-    | "South America"
-    | "Oceania";
+const PAGE_COUNT = 4;
 
-  eu?: boolean;
-  schengen?: boolean;
-  nato?: boolean;
-};
-
-const COUNTRY_DATA: Record<string, CountryInfo> = {
-  lv: {
-    continent: "Europe",
-    eu: true,
-    schengen: true,
-    nato: true,
-  },
-  es: {
-    continent: "Europe",
-    eu: true,
-    schengen: true,
-    nato: true,
-  },
-  tr: {
-    continent: "Asia",
-    nato: true,
-  },
-};
-
-const CONTINENTS = [
-  "Europe",
-  "Asia",
-  "Africa",
-  "North America",
-  "South America",
-  "Oceania",
-] as const;
-
-const TOTAL_COUNTRIES = 195;
-
-export default function StatsCarousel({
-  visitedCountries,
-}: Props) {
+export default function StatsCarousel({ statistics }: Props) {
   const [activePage, setActivePage] = useState(0);
-
   const { width } = useWindowDimensions();
   const cardWidth = width - 40;
-
-  const statistics = useMemo(() => {
-    const continentCounts: Record<string, number> = {};
-
-    CONTINENTS.forEach((continent) => {
-      continentCounts[continent] = 0;
-    });
-
-    let eu = 0;
-    let schengen = 0;
-    let nato = 0;
-
-    visitedCountries.forEach((countryId) => {
-      const id = countryId.toLowerCase();
-      const info = COUNTRY_DATA[id];
-
-      if (!info) return;
-
-      continentCounts[info.continent] += 1;
-
-      if (info.eu) eu += 1;
-      if (info.schengen) schengen += 1;
-      if (info.nato) nato += 1;
-    });
-
-    const continentsVisited = Object.values(
-      continentCounts
-    ).filter((count) => count > 0).length;
-
-    const worldPercentage =
-      (visitedCountries.length / TOTAL_COUNTRIES) * 100;
-
-    return {
-      continentCounts,
-      continentsVisited,
-      worldPercentage,
-      eu,
-      schengen,
-      nato,
-    };
-  }, [visitedCountries]);
 
   function onScrollEnd(
     event: NativeSyntheticEvent<NativeScrollEvent>
@@ -112,7 +28,7 @@ export default function StatsCarousel({
     const x = event.nativeEvent.contentOffset.x;
     const page = Math.round(x / cardWidth);
 
-    setActivePage(page);
+    setActivePage(Math.max(0, Math.min(PAGE_COUNT - 1, page)));
   }
 
   return (
@@ -124,39 +40,32 @@ export default function StatsCarousel({
         onMomentumScrollEnd={onScrollEnd}
       >
         <View style={[styles.page, { width: cardWidth }]}>
-          <Header title="OVERVIEW" number="1 / 3" />
+          <Header title="OVERVIEW" page={1} />
 
-          <View style={styles.overviewRow}>
+          <View style={styles.overviewGrid}>
             <Stat
-              value={visitedCountries.length}
-              label="countries"
+              value={statistics.countryCount}
+              label="Countries"
             />
-
+            <Stat value={statistics.cityCount} label="Cities" />
             <Stat
-              value={statistics.continentsVisited}
-              label="continents"
+              value={statistics.continentCount}
+              label="Continents"
             />
-
             <Stat
               value={`${statistics.worldPercentage.toFixed(1)}%`}
-              label="of world"
+              label="Of world"
             />
           </View>
         </View>
 
         <View style={[styles.page, { width: cardWidth }]}>
-          <Header title="CONTINENTS" number="2 / 3" />
+          <Header title="CONTINENTS" page={2} />
 
           <View style={styles.continentGrid}>
             {CONTINENTS.map((continent) => (
-              <View
-                key={continent}
-                style={styles.continentItem}
-              >
-                <Text style={styles.continentName}>
-                  {continent}
-                </Text>
-
+              <View key={continent} style={styles.continentItem}>
+                <Text style={styles.continentName}>{continent}</Text>
                 <Text style={styles.continentNumber}>
                   {statistics.continentCounts[continent]}
                 </Text>
@@ -166,29 +75,53 @@ export default function StatsCarousel({
         </View>
 
         <View style={[styles.page, { width: cardWidth }]}>
-          <Header title="REGIONS" number="3 / 3" />
+          <Header title="REGIONS / MEMBERSHIPS" page={3} />
 
           <View style={styles.regionContainer}>
             <Region
               name="European Union"
-              count={statistics.eu}
+              abbreviation="EU"
+              count={statistics.membershipCounts.eu}
             />
-
             <Region
               name="Schengen Area"
-              count={statistics.schengen}
+              abbreviation="SCHENGEN"
+              count={statistics.membershipCounts.schengen}
             />
-
             <Region
-              name="NATO"
-              count={statistics.nato}
+              name="North Atlantic Treaty Organization"
+              abbreviation="NATO"
+              count={statistics.membershipCounts.nato}
+            />
+          </View>
+        </View>
+
+        <View style={[styles.page, { width: cardWidth }]}>
+          <Header title="TRAVEL HISTORY" page={4} />
+
+          <View style={styles.historyRow}>
+            <Stat
+              value={statistics.tripCount}
+              label="Trips"
+              threeColumn
+            />
+            <Stat
+              value={statistics.countriesThisYear}
+              label="Countries this year"
+              threeColumn
+            />
+            <Stat
+              value={statistics.mostExploredContinent ?? "—"}
+              label="Most explored"
+              compact
+              threeColumn
             />
           </View>
         </View>
       </ScrollView>
 
       <View style={styles.dots}>
-        {[0, 1, 2].map((index) => (
+        {Array.from({ length: PAGE_COUNT }, (_, index) => (
           <View
             key={index}
             style={[
@@ -202,17 +135,13 @@ export default function StatsCarousel({
   );
 }
 
-function Header({
-  title,
-  number,
-}: {
-  title: string;
-  number: string;
-}) {
+function Header({ title, page }: { title: string; page: number }) {
   return (
     <View style={styles.header}>
       <Text style={styles.eyebrow}>{title}</Text>
-      <Text style={styles.pageNumber}>{number}</Text>
+      <Text style={styles.pageNumber}>
+        {page} / {PAGE_COUNT}
+      </Text>
     </View>
   );
 }
@@ -220,13 +149,23 @@ function Header({
 function Stat({
   value,
   label,
+  compact = false,
+  threeColumn = false,
 }: {
   value: string | number;
   label: string;
+  compact?: boolean;
+  threeColumn?: boolean;
 }) {
   return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
+    <View style={[styles.stat, threeColumn && styles.thirdStat]}>
+      <Text
+        style={[styles.statValue, compact && styles.compactStatValue]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value}
+      </Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
@@ -234,14 +173,21 @@ function Stat({
 
 function Region({
   name,
+  abbreviation,
   count,
 }: {
   name: string;
+  abbreviation: string;
   count: number;
 }) {
   return (
     <View style={styles.regionRow}>
-      <Text style={styles.regionName}>{name}</Text>
+      <View style={styles.regionTextArea}>
+        <Text style={styles.regionAbbreviation}>{abbreviation}</Text>
+        <Text style={styles.regionName} numberOfLines={1}>
+          {name}
+        </Text>
+      </View>
       <Text style={styles.regionCount}>{count}</Text>
     </View>
   );
@@ -256,118 +202,129 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     overflow: "hidden",
   },
-
   page: {
-    minHeight: 118,
+    minHeight: 154,
     paddingHorizontal: 17,
     paddingTop: 14,
     paddingBottom: 10,
   },
-
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   eyebrow: {
     fontSize: 10,
     fontWeight: "700",
-    letterSpacing: 1.5,
+    letterSpacing: 1.35,
     color: "#777777",
   },
-
   pageNumber: {
     fontSize: 10,
     color: "#B3B3B3",
   },
-
-  overviewRow: {
+  overviewGrid: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 10,
+    flexWrap: "wrap",
+    alignContent: "center",
+    marginTop: 7,
   },
-
   stat: {
-    flex: 1,
+    width: "50%",
+    paddingVertical: 6,
+    paddingRight: 6,
   },
-
+  thirdStat: {
+    width: "33.3333%",
+  },
   statValue: {
     fontSize: 23,
     fontWeight: "700",
     color: "#111111",
   },
-
+  compactStatValue: {
+    fontSize: 18,
+  },
   statLabel: {
     marginTop: 2,
     fontSize: 11,
     color: "#777777",
   },
-
   continentGrid: {
-    marginTop: 9,
+    marginTop: 12,
     flexDirection: "row",
     flexWrap: "wrap",
   },
-
   continentItem: {
     width: "50%",
-    paddingVertical: 4,
+    paddingVertical: 6,
     paddingRight: 20,
     flexDirection: "row",
     justifyContent: "space-between",
   },
-
   continentName: {
     fontSize: 11.5,
     color: "#777777",
   },
-
   continentNumber: {
     fontSize: 11.5,
     fontWeight: "700",
     color: "#111111",
   },
-
   regionContainer: {
-    marginTop: 9,
+    marginTop: 10,
   },
-
   regionRow: {
-    minHeight: 25,
+    minHeight: 34,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F2F2F2",
   },
-
+  regionTextArea: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  regionAbbreviation: {
+    width: 76,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    color: "#765FD2",
+  },
   regionName: {
-    fontSize: 12,
-    color: "#777777",
+    flex: 1,
+    fontSize: 11,
+    color: "#888888",
   },
-
   regionCount: {
-    fontSize: 13,
+    marginLeft: 8,
+    fontSize: 14,
     fontWeight: "700",
     color: "#111111",
   },
-
+  historyRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 9,
+  },
   dots: {
-    height: 20,
+    height: 22,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
   },
-
   dot: {
     width: 5,
     height: 5,
     borderRadius: 3,
     backgroundColor: "#D8D8D8",
   },
-
   activeDot: {
     width: 15,
     backgroundColor: "#C9B8FF",

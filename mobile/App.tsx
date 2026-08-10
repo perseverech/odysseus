@@ -14,6 +14,8 @@ import {
 
 import BottomTabs from "./src/navigation/BottomTabs";
 import { WishlistProvider } from "./src/context/WishlistContext";
+import { TravelDataProvider } from "./src/context/TravelDataContext";
+import { FriendsProvider } from "./src/context/FriendsContext";
 
 export default function App() {
   return (
@@ -22,9 +24,13 @@ export default function App() {
     >
       <SafeAreaProvider>
         <WishlistProvider>
-          <NavigationContainer>
-            <BottomTabs />
-          </NavigationContainer>
+          <TravelDataProvider>
+            <FriendsProvider>
+              <NavigationContainer>
+                <BottomTabs />
+              </NavigationContainer>
+            </FriendsProvider>
+          </TravelDataProvider>
         </WishlistProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

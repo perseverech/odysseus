@@ -1,6 +1,7 @@
 import React from "react";
 
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -8,76 +9,72 @@ import HomeScreen from "../screens/HomeScreen";
 
 import DiscoverStack from "./DiscoverStack";
 
-import FriendsScreen from "../screens/FriendsScreen";
+import FriendsStack from "./FriendsStack";
+import type { RootTabParamList } from "./navigationTypes";
+import ProfileStack from "./ProfileStack";
 
-import ProfileScreen from "../screens/ProfileScreen";
-
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<RootTabParamList>();
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
 export default function BottomTabs() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
+      screenOptions={({ route }) => {
+        const nestedRoute = getFocusedRouteNameFromRoute(route);
+        const hideTabBar =
+          (route.name === "Profile" &&
+            Boolean(nestedRoute && nestedRoute !== "ProfileMain")) ||
+          (route.name === "Friends" &&
+            Boolean(nestedRoute && nestedRoute !== "FriendsMain"));
 
-        tabBarActiveTintColor: "#111111",
+        return {
+          headerShown: false,
 
-        tabBarInactiveTintColor: "#A0A0A0",
+          tabBarActiveTintColor: "#111111",
 
-        tabBarStyle: {
-          backgroundColor: "#FFFFFF",
+          tabBarInactiveTintColor: "#A0A0A0",
 
-          borderTopWidth: 0.5,
+          tabBarStyle: hideTabBar
+            ? { display: "none" }
+            : {
+                backgroundColor: "#FFFFFF",
 
-          borderTopColor: "#E8E8E8",
+                borderTopWidth: 0.5,
 
-          height: 82,
+                borderTopColor: "#E8E8E8",
 
-          paddingTop: 7,
-        },
+                height: 82,
 
-        tabBarLabelStyle: {
-          fontSize: 11,
+                paddingTop: 7,
+              },
 
-          fontWeight: "500",
+          tabBarLabelStyle: {
+            fontSize: 11,
 
-          marginBottom: 5,
-        },
+            fontWeight: "500",
 
-        tabBarIcon: ({
-          color,
-          size,
-          focused,
-        }) => {
-          let iconName: any;
+            marginBottom: 5,
+          },
 
-          if (route.name === "Home") {
-            iconName = focused
-              ? "home"
-              : "home-outline";
-          } else if (route.name === "Discover") {
-            iconName = focused
-              ? "compass"
-              : "compass-outline";
-          } else if (route.name === "Friends") {
-            iconName = focused
-              ? "people"
-              : "people-outline";
-          } else {
-            iconName = focused
-              ? "person"
-              : "person-outline";
-          }
+          tabBarIcon: ({ color, size, focused }) => {
+            let iconName: IoniconName;
 
-          return (
-            <Ionicons
-              name={iconName}
-              size={size}
-              color={color}
-            />
-          );
-        },
-      })}
+            if (route.name === "Home") {
+              iconName = focused ? "home" : "home-outline";
+            } else if (route.name === "Discover") {
+              iconName = focused ? "compass" : "compass-outline";
+            } else if (route.name === "Friends") {
+              iconName = focused ? "people" : "people-outline";
+            } else {
+              iconName = focused ? "person" : "person-outline";
+            }
+
+            return (
+              <Ionicons name={iconName} size={size} color={color} />
+            );
+          },
+        };
+      }}
     >
       <Tab.Screen
         name="Home"
@@ -91,12 +88,12 @@ export default function BottomTabs() {
 
       <Tab.Screen
         name="Friends"
-        component={FriendsScreen}
+        component={FriendsStack}
       />
 
       <Tab.Screen
         name="Profile"
-        component={ProfileScreen}
+        component={ProfileStack}
       />
     </Tab.Navigator>
   );

@@ -16,6 +16,8 @@ type WishlistContextType = {
   isSaved: (id: string) => boolean;
 
   toggleWishlist: (id: string) => void;
+
+  removeFromWishlist: (id: string) => void;
 };
 
 const WishlistContext =
@@ -79,12 +81,29 @@ export function WishlistProvider({
     });
   }
 
+  function removeFromWishlist(id: string) {
+    setWishlist((current) => {
+      if (!current.includes(id)) {
+        return current;
+      }
+
+      const updated = current.filter(
+        (itemId) => itemId !== id
+      );
+
+      saveWishlist(updated);
+
+      return updated;
+    });
+  }
+
   return (
     <WishlistContext.Provider
       value={{
         wishlist,
         isSaved,
         toggleWishlist,
+        removeFromWishlist,
       }}
     >
       {children}
