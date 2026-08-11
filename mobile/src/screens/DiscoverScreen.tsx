@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import {
   Image,
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,9 +20,13 @@ import {
   discoverItems,
   DiscoverItem,
 } from "../data/discoverItems";
+import { placeToDiscoverItem } from "../data/placeCatalog";
 import type { DiscoverStackParamList } from "../navigation/DiscoverStack";
 
 import { useWishlist } from "../context/WishlistContext";
+import { useTravelData } from "../context/TravelDataContext";
+import { usePlacesQuery } from "../hooks/usePlacesCatalog";
+import { apiPlacesProvider } from "../services/placesProvider";
 
 const filters = [
   "For you",
@@ -66,9 +71,36 @@ export default function DiscoverScreen({ navigation }: Props) {
     useState("For you");
   const [searchQuery, setSearchQuery] =
     useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
 
   const { isSaved, toggleWishlist } =
     useWishlist();
+  const { cacheLivePlaces, livePlaces: cachedLivePlaces } = useTravelData();
+  const {
+    places: searchedLivePlaces,
+    isLoading: liveSearchLoading,
+    error: liveSearchError,
+    reload: reloadLiveSearch,
+  } = usePlacesQuery(
+    apiPlacesProvider,
+    { search: submittedSearch },
+    submittedSearch.length >= 2
+  );
+
+  useEffect(() => {
+    cacheLivePlaces(searchedLivePlaces);
+  }, [searchedLivePlaces]);
+
+  const liveDiscoverItems = useMemo(
+    () =>
+      [...searchedLivePlaces, ...cachedLivePlaces]
+        .filter(
+          (place, index, places) =>
+            places.findIndex((candidate) => candidate.id === place.id) === index
+        )
+        .map(placeToDiscoverItem),
+    [cachedLivePlaces, searchedLivePlaces]
+  );
 
   const normalizedQuery =
     normalizeSearchValue(searchQuery);
@@ -77,7 +109,7 @@ export default function DiscoverScreen({ navigation }: Props) {
     .split(/\s+/)
     .filter(Boolean);
 
-  const searchResults = discoverItems.filter((item) => {
+  const searchResults = [...liveDiscoverItems, ...discoverItems].filter((item) => {
     const searchableText = normalizeSearchValue(
       [
         item.title,
@@ -93,7 +125,16 @@ export default function DiscoverScreen({ navigation }: Props) {
     return searchTerms.every((term) =>
       searchableText.includes(term)
     );
-  });
+  }).filter(
+    (item, index, items) =>
+      items.findIndex(
+        (candidate) =>
+          normalizeSearchValue(candidate.title) ===
+            normalizeSearchValue(item.title) &&
+          normalizeSearchValue(candidate.location) ===
+            normalizeSearchValue(item.location)
+      ) === index
+  );
 
   const visibleSections = normalizedQuery
     ? [
@@ -125,6 +166,19 @@ export default function DiscoverScreen({ navigation }: Props) {
     );
   }
 
+  function submitSearch() {
+    const nextSearch = searchQuery.trim();
+
+    if (nextSearch.length >= 2) {
+      setSubmittedSearch(nextSearch);
+    }
+  }
+
+  function clearSearch() {
+    setSearchQuery("");
+    setSubmittedSearch("");
+  }
+
   return (
     <SafeAreaView
       style={styles.safeArea}
@@ -150,11 +204,17 @@ export default function DiscoverScreen({ navigation }: Props) {
         </Text>
 
         <View style={styles.searchContainer}>
-          <Ionicons
-            name="search-outline"
-            size={19}
-            color="#777777"
-          />
+          <TouchableOpacity
+            onPress={submitSearch}
+            accessibilityRole="button"
+            accessibilityLabel="Search live places"
+          >
+            <Ionicons
+              name="search-outline"
+              size={19}
+              color="#777777"
+            />
+          </TouchableOpacity>
 
           <TextInput
             value={searchQuery}
@@ -165,12 +225,13 @@ export default function DiscoverScreen({ navigation }: Props) {
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
+            onSubmitEditing={submitSearch}
           />
 
           {searchQuery.length > 0 && (
             <TouchableOpacity
               style={styles.clearSearch}
-              onPress={() => setSearchQuery("")}
+              onPress={clearSearch}
               accessibilityRole="button"
               accessibilityLabel="Clear search"
             >
@@ -182,6 +243,36 @@ export default function DiscoverScreen({ navigation }: Props) {
             </TouchableOpacity>
           )}
         </View>
+
+        {normalizedQuery && (
+          <View style={styles.liveSearchStatus}>
+            {liveSearchLoading ? (
+              <>
+                <ActivityIndicator size="small" color="#765FD2" />
+                <Text style={styles.liveSearchStatusText}>
+                  Searching live places…
+                </Text>
+              </>
+            ) : liveSearchError && submittedSearch ? (
+              <>
+                <Text style={styles.liveSearchError} numberOfLines={2}>
+                  Live search unavailable: {liveSearchError}
+                </Text>
+                <TouchableOpacity onPress={reloadLiveSearch}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </>
+            ) : submittedSearch ? (
+              <Text style={styles.liveSearchStatusText}>
+                {searchedLivePlaces.length} live places · OpenStreetMap
+              </Text>
+            ) : (
+              <Text style={styles.liveSearchStatusText}>
+                Press Search to find real places and source-backed details.
+              </Text>
+            )}
+          </View>
+        )}
 
         {!normalizedQuery && (
           <ScrollView
@@ -228,9 +319,23 @@ export default function DiscoverScreen({ navigation }: Props) {
               normalizedQuery && styles.searchSection,
             ]}
           >
-            <Text style={styles.sectionTitle}>
-              {section.title}
-            </Text>
+            <View style={styles.sectionHeadingRow}>
+              <Text style={styles.sectionTitle}>
+                {section.title}
+              </Text>
+
+              {!normalizedQuery && section.category === "Place" && (
+                <TouchableOpacity
+                  style={styles.viewAllButton}
+                  onPress={() => navigation.navigate("DiscoverPlacesAlbum")}
+                  accessibilityRole="button"
+                  accessibilityLabel="View all places as an album"
+                >
+                  <Ionicons name="grid-outline" size={15} color="#765FD2" />
+                  <Text style={styles.viewAllText}>View all</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {normalizedQuery && (
               <Text style={styles.resultCount}>
@@ -258,10 +363,20 @@ export default function DiscoverScreen({ navigation }: Props) {
                   activeOpacity={0.85}
                   onPress={() => openItem(item)}
                 >
-                  <Image
-                    source={{ uri: item.image }}
-                    style={styles.image}
-                  />
+                  {item.image ? (
+                    <Image
+                      source={{ uri: item.image }}
+                      style={styles.image}
+                    />
+                  ) : (
+                    <View style={[styles.image, styles.imageFallback]}>
+                      <Ionicons
+                        name="location-outline"
+                        size={34}
+                        color="#765FD2"
+                      />
+                    </View>
+                  )}
 
                   <TouchableOpacity
                     style={styles.heart}
@@ -292,6 +407,11 @@ export default function DiscoverScreen({ navigation }: Props) {
                       {item.isDemoData && (
                         <View style={styles.demoBadge}>
                           <Text style={styles.demoBadgeText}>DEMO</Text>
+                        </View>
+                      )}
+                      {item.isLiveData && (
+                        <View style={styles.liveBadge}>
+                          <Text style={styles.liveBadgeText}>LIVE</Text>
                         </View>
                       )}
                     </View>
@@ -411,6 +531,35 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
 
+  liveSearchStatus: {
+    minHeight: 30,
+    marginTop: 8,
+    marginHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  liveSearchStatusText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#777777",
+  },
+
+  liveSearchError: {
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 15,
+    color: "#A15359",
+  },
+
+  retryText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#765FD2",
+  },
+
   filters: {
     paddingHorizontal: 20,
 
@@ -458,11 +607,34 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    marginBottom: 12,
-    paddingHorizontal: 20,
     fontSize: 22,
     fontWeight: "700",
     color: "#111111",
+  },
+
+  sectionHeadingRow: {
+    minHeight: 38,
+    marginBottom: 12,
+    paddingHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  viewAllButton: {
+    height: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#EEE9FF",
+  },
+
+  viewAllText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#765FD2",
   },
 
   resultCount: {
@@ -501,6 +673,12 @@ const styles = StyleSheet.create({
     height: 220,
 
     backgroundColor: "#F4F4F4",
+  },
+
+  imageFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEE9FF",
   },
 
   heart: {
@@ -556,6 +734,20 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.7,
     color: "#765FD2",
+  },
+
+  liveBadge: {
+    borderRadius: 7,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    backgroundColor: "#E4F4EA",
+  },
+
+  liveBadgeText: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    color: "#34704C",
   },
 
   cardTitle: {

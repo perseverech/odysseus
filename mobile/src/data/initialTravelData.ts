@@ -1,4 +1,5 @@
 import type { TravelData } from "../models/travel";
+import { createDefaultPackingItems } from "./packingChecklist";
 
 function dateInYear(year: number, monthAndDay: string) {
   return `${year}-${monthAndDay}`;
@@ -117,6 +118,7 @@ export function createInitialTravelData(
         priorityPlaceIds: [],
         unscheduledPlaceIds: [],
         unscheduledPlaceReasons: {},
+        packingItems: createDefaultPackingItems("upcoming-barcelona"),
         notes: "Winter city break",
         flightIds: ["flight-riga-barcelona"],
         createdAt: dateInYear(currentYear, "08-10"),
@@ -146,5 +148,6 @@ export function createInitialTravelData(
       },
     ],
     customPlaces: [],
+    livePlaces: [],
   };
 }

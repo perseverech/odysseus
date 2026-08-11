@@ -115,6 +115,22 @@ export type RouteDay = {
   currency: string;
 };
 
+export type PackingCategory =
+  | "documents"
+  | "essentials"
+  | "clothing"
+  | "health"
+  | "tech"
+  | "other";
+
+export type PackingItem = {
+  id: string;
+  label: string;
+  category: PackingCategory;
+  isPacked: boolean;
+  isDefault: boolean;
+};
+
 export type Trip = {
   id: string;
   destinationCity: string;
@@ -136,6 +152,7 @@ export type Trip = {
     Record<string, UnscheduledPlaceReason>
   >;
   routeDays?: RouteDay[];
+  packingItems: PackingItem[];
   notes?: string;
   flightIds: string[];
   createdAt: string;
@@ -173,6 +190,7 @@ export type CreateTripInput = Omit<
   | "unscheduledPlaceIds"
   | "unscheduledPlaceReasons"
   | "routeDays"
+  | "packingItems"
   | "createdAt"
   | "updatedAt"
 >;
@@ -188,6 +206,7 @@ export type TravelData = {
   upcomingTrips: Trip[];
   flights: Flight[];
   customPlaces: Place[];
+  livePlaces: Place[];
 };
 
 export type TravelStatistics = {

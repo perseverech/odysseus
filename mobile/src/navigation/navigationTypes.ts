@@ -29,6 +29,9 @@ export type ProfileStackParamList = {
   TripPlaces: {
     tripId: string;
   };
+  PackingChecklist: {
+    tripId: string;
+  };
   AddCustomPlace: {
     tripId: string;
   };

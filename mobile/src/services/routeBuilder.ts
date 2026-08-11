@@ -291,6 +291,16 @@ function getOpeningWindow(place: Place, dateValue: string): OpeningWindow {
     };
   }
 
+  if (place.source === "live" && openingHours.weekly && weekday) {
+    return null;
+  }
+
+  if (place.source === "live") {
+    // Keep unsupported source syntax visible in the UI, but do not turn it into
+    // a guessed schedule constraint in the route builder.
+    return { opensAt: 0, closesAt: 24 * 60 };
+  }
+
   const summary = openingHours.summary?.trim().toLocaleLowerCase();
 
   if (!summary || summary.includes("all day") || summary.includes("24 hour")) {

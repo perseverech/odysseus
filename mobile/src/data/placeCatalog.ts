@@ -77,6 +77,75 @@ export function discoverItemToPlace(item: DiscoverItem): Place {
   };
 }
 
+function durationLabel(minutes: number) {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+
+  if (hours === 0) return `${remainder} min`;
+  if (remainder === 0) return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+
+  return `${hours}h ${remainder}m`;
+}
+
+function livePlacePrice(place: Place) {
+  if (place.isFree || place.price === 0) return "Free";
+  if (place.priceLabel) return place.priceLabel;
+  if (place.price !== undefined) {
+    return `${place.price} ${place.currency ?? ""}`.trim();
+  }
+  if (place.isFree === false) return "Paid · price not provided";
+
+  return "Price not provided";
+}
+
+export function placeToDiscoverItem(place: Place): DiscoverItem {
+  return {
+    id: place.id,
+    category: "Place",
+    title: place.name,
+    location: place.city,
+    country: place.country,
+    image: place.image ?? "",
+    price: livePlacePrice(place),
+    paymentType:
+      place.isFree || place.price === 0
+        ? "Free"
+        : place.isFree === false || place.price !== undefined
+          ? "Paid"
+          : "Unknown",
+    ticketInfo: place.ticketsUrl
+      ? "Ticket link provided by source"
+      : "Not provided by source",
+    duration: `${durationLabel(place.estimatedVisitMinutes)} estimate`,
+    openingHours:
+      place.openingHours?.summary ?? "Not provided by source",
+    bestSeason: place.bestSeason ?? "Not provided by source",
+    description:
+      place.description ?? "No description was provided by the source.",
+    keywords: [place.name, place.city, place.country, place.category],
+    officialSiteUrl: place.officialWebsite,
+    ticketsUrl: place.ticketsUrl,
+    mapsUrl:
+      place.mapsUrl ??
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        `${place.latitude ?? ""},${place.longitude ?? ""}`
+      )}`,
+    placeData:
+      place.latitude !== undefined && place.longitude !== undefined
+        ? {
+            latitude: place.latitude,
+            longitude: place.longitude,
+            estimatedVisitMinutes: place.estimatedVisitMinutes,
+            price: place.price,
+            currency: place.currency,
+          }
+        : undefined,
+    placeCategory: place.category,
+    isLiveData: place.source === "live",
+    dataSource: place.dataSource,
+  };
+}
+
 export const istanbulDemoPlaces: Place[] = [
   {
     id: "istanbul-hagia-sophia",

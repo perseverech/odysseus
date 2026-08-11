@@ -1,12 +1,13 @@
 import { additionalDiscoverItems } from "./additionalDiscoverItems";
 import { focusedCityDiscoverItems } from "./focusedCityDiscoverItems";
+import type { PlaceDataSource } from "../models/place";
 
 export type DiscoverPlaceData = {
   latitude: number;
   longitude: number;
   estimatedVisitMinutes: number;
   price?: number;
-  currency: string;
+  currency?: string;
 };
 
 export type DiscoverItem = {
@@ -18,7 +19,7 @@ export type DiscoverItem = {
   image: string;
 
   price: string;
-  paymentType: "Free" | "Paid" | "Mixed";
+  paymentType: "Free" | "Paid" | "Mixed" | "Unknown";
   ticketInfo: string;
   duration: string;
   openingHours: string;
@@ -28,12 +29,14 @@ export type DiscoverItem = {
   note?: string;
   keywords: string[];
 
-  officialSiteUrl: string;
+  officialSiteUrl?: string;
   ticketsUrl?: string;
   mapsUrl: string;
   placeData?: DiscoverPlaceData;
   placeCategory?: string;
   isDemoData?: boolean;
+  isLiveData?: boolean;
+  dataSource?: PlaceDataSource;
 };
 
 export const discoverItems: DiscoverItem[] = [

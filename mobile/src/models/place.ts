@@ -18,7 +18,14 @@ export type OpeningHours = {
   weekly?: Partial<Record<Weekday, OpeningHoursPeriod[]>>;
 };
 
-export type PlaceSource = "catalog" | "discover" | "manual";
+export type PlaceSource = "catalog" | "discover" | "manual" | "live";
+
+export type PlaceDataSource = {
+  name: string;
+  url?: string;
+  attribution?: string;
+  imageAttribution?: string;
+};
 
 export type Place = {
   id: string;
@@ -31,6 +38,7 @@ export type Place = {
   category: string;
   description?: string;
   estimatedVisitMinutes: number;
+  durationSource?: "provider" | "estimate" | "manual";
   price?: number;
   priceLabel?: string;
   currency?: string;
@@ -43,6 +51,7 @@ export type Place = {
   mapsUrl?: string;
   notes?: string;
   isDemoData?: boolean;
+  dataSource?: PlaceDataSource;
   source: PlaceSource;
   createdAt?: string;
   updatedAt?: string;

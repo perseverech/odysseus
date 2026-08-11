@@ -36,12 +36,13 @@ export default function TripDetailScreen({ route, navigation }: Props) {
     trips,
     flights,
     customPlaces,
+    livePlaces,
     deleteTrip,
     setTripRoutePlan,
     setTripPriorityPlaceIds,
   } = useTravelData();
   const trip = trips.find((item) => item.id === route.params.tripId);
-  const { places: allPlaces } = usePlacesCatalog(customPlaces);
+  const { places: allPlaces } = usePlacesCatalog(customPlaces, livePlaces);
 
   if (!trip) {
     return (

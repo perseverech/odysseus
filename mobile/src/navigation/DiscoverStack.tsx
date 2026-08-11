@@ -5,12 +5,14 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import DiscoverScreen from "../screens/DiscoverScreen";
 
 import DiscoverDetailScreen from "../screens/DiscoverDetailScreen";
+import DiscoverPlacesAlbumScreen from "../screens/DiscoverPlacesAlbumScreen";
 
 export type DiscoverStackParamList = {
   DiscoverMain: undefined;
   DiscoverDetail: {
     itemId: string;
   };
+  DiscoverPlacesAlbum: undefined;
 };
 
 const Stack =
@@ -29,6 +31,11 @@ export default function DiscoverStack() {
       <Stack.Screen
         name="DiscoverMain"
         component={DiscoverScreen}
+      />
+
+      <Stack.Screen
+        name="DiscoverPlacesAlbum"
+        component={DiscoverPlacesAlbumScreen}
       />
 
       <Stack.Screen

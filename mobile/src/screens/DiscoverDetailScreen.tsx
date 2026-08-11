@@ -18,12 +18,17 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { discoverItems } from "../data/discoverItems";
+import { placeToDiscoverItem } from "../data/placeCatalog";
 
 import { useWishlist } from "../context/WishlistContext";
 import { useTravelData } from "../context/TravelDataContext";
 import type { DiscoverStackParamList } from "../navigation/DiscoverStack";
 import type { RootTabParamList } from "../navigation/navigationTypes";
 import { formatTripDateRange } from "../utils/travelDates";
+import {
+  isPlaceInTripDestination,
+  placeTripMismatchMessage,
+} from "../utils/placeCompatibility";
 
 type Props = NativeStackScreenProps<
   DiscoverStackParamList,
@@ -37,13 +42,13 @@ export default function DiscoverDetailScreen({
   const { itemId } = route.params;
   const [tripModalVisible, setTripModalVisible] = useState(false);
 
-  const item = discoverItems.find(
-    (entry) => entry.id === itemId
-  );
-
   const { isSaved, toggleWishlist } =
     useWishlist();
-  const { trips, setTripSelectedPlaceIds } = useTravelData();
+  const { trips, livePlaces, setTripSelectedPlaceIds } = useTravelData();
+  const livePlace = livePlaces.find((place) => place.id === itemId);
+  const item =
+    discoverItems.find((entry) => entry.id === itemId) ??
+    (livePlace ? placeToDiscoverItem(livePlace) : undefined);
 
   if (!item) {
     return (
@@ -54,6 +59,10 @@ export default function DiscoverDetailScreen({
   }
 
   const discoverItemId = item.id;
+  const itemLocation = {
+    city: item.location,
+    country: item.country,
+  };
   const saved = isSaved(discoverItemId);
   const availableTrips = trips.filter((trip) => trip.status !== "completed");
   const addedTrips = availableTrips.filter((trip) =>
@@ -69,7 +78,7 @@ export default function DiscoverDetailScreen({
   function addToTrip(tripId: string) {
     const trip = trips.find((entry) => entry.id === tripId);
 
-    if (!trip) return;
+    if (!trip || !isPlaceInTripDestination(itemLocation, trip)) return;
 
     setTripSelectedPlaceIds(trip.id, [
       ...trip.selectedPlaceIds,
@@ -96,12 +105,18 @@ export default function DiscoverDetailScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
-          <Image
-            source={{
-              uri: item.image,
-            }}
-            style={styles.heroImage}
-          />
+          {item.image ? (
+            <Image
+              source={{
+                uri: item.image,
+              }}
+              style={styles.heroImage}
+            />
+          ) : (
+            <View style={[styles.heroImage, styles.heroImageFallback]}>
+              <Ionicons name="location-outline" size={54} color="#765FD2" />
+            </View>
+          )}
 
           <SafeAreaView
             style={styles.heroControls}
@@ -179,6 +194,20 @@ export default function DiscoverDetailScreen({
             </View>
           )}
 
+          {item.isLiveData && (
+            <View style={styles.liveNotice}>
+              <Ionicons
+                name="cloud-done-outline"
+                size={17}
+                color="#34704C"
+              />
+              <Text style={styles.liveNoticeText}>
+                Real listing from OpenStreetMap and Wikimedia. Price and hours
+                appear only when published by the source; visit time is an estimate.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.infoGrid}>
             <Info
               icon="cash-outline"
@@ -200,7 +229,7 @@ export default function DiscoverDetailScreen({
 
             <Info
               icon="time-outline"
-              label="Duration"
+              label={item.isLiveData ? "Estimated duration" : "Duration"}
               value={item.duration}
             />
 
@@ -215,6 +244,22 @@ export default function DiscoverDetailScreen({
               label="Tickets"
               value={item.ticketInfo}
             />
+
+            {item.placeData && (
+              <Info
+                icon="navigate-outline"
+                label="Coordinates"
+                value={`${item.placeData.latitude.toFixed(5)}, ${item.placeData.longitude.toFixed(5)}`}
+              />
+            )}
+
+            {item.placeCategory && (
+              <Info
+                icon="pricetag-outline"
+                label="Category"
+                value={item.placeCategory.replace(/_/g, " ")}
+              />
+            )}
           </View>
 
           <Text style={styles.sectionTitle}>
@@ -306,11 +351,13 @@ export default function DiscoverDetailScreen({
             </Text>
           </TouchableOpacity>
 
-          <ExternalLinkButton
-            icon="globe-outline"
-            label="Official website"
-            url={item.officialSiteUrl}
-          />
+          {item.officialSiteUrl && (
+            <ExternalLinkButton
+              icon="globe-outline"
+              label="Official website"
+              url={item.officialSiteUrl}
+            />
+          )}
 
           {item.ticketsUrl && (
             <ExternalLinkButton
@@ -325,6 +372,23 @@ export default function DiscoverDetailScreen({
             label="Open in Google Maps"
             url={item.mapsUrl}
           />
+
+          {item.dataSource?.url && (
+            <ExternalLinkButton
+              icon="information-circle-outline"
+              label={`Source: ${item.dataSource.name}`}
+              url={item.dataSource.url}
+            />
+          )}
+
+          {item.dataSource?.attribution && (
+            <Text style={styles.attribution}>
+              {item.dataSource.attribution}
+              {item.dataSource.imageAttribution
+                ? ` · Image: ${item.dataSource.imageAttribution}`
+                : ""}
+            </Text>
+          )}
         </View>
       </ScrollView>
 
@@ -356,23 +420,64 @@ export default function DiscoverDetailScreen({
             ) : (
               availableTrips.map((trip) => {
                 const added = trip.selectedPlaceIds.includes(item.id);
+                const mismatchMessage = placeTripMismatchMessage(
+                  itemLocation,
+                  trip
+                );
+                const incompatible = Boolean(mismatchMessage);
 
                 return (
                   <TouchableOpacity
                     key={trip.id}
-                    style={styles.tripOption}
+                    style={[
+                      styles.tripOption,
+                      incompatible && styles.tripOptionDisabled,
+                    ]}
                     onPress={() => addToTrip(trip.id)}
+                    disabled={incompatible || added}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: incompatible || added }}
+                    accessibilityLabel={
+                      mismatchMessage ?? `Add ${item.title} to ${trip.destinationCity}`
+                    }
                   >
-                    <View style={[styles.radio, added && styles.radioAdded]}>
-                      {added && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+                    <View
+                      style={[
+                        styles.radio,
+                        added && styles.radioAdded,
+                        incompatible && styles.radioDisabled,
+                      ]}
+                    >
+                      {added ? (
+                        <Ionicons name="checkmark" size={13} color="#FFFFFF" />
+                      ) : incompatible ? (
+                        <Ionicons name="lock-closed" size={11} color="#9B929F" />
+                      ) : null}
                     </View>
                     <View style={styles.tripOptionBody}>
-                      <Text style={styles.tripOptionCity}>{trip.destinationCity}</Text>
-                      <Text style={styles.tripOptionDates}>
-                        {formatTripDateRange(trip.startDate, trip.endDate)}
+                      <Text
+                        style={[
+                          styles.tripOptionCity,
+                          incompatible && styles.tripOptionCityDisabled,
+                        ]}
+                      >
+                        {trip.destinationCity}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.tripOptionDates,
+                          incompatible && styles.tripOptionMismatch,
+                        ]}
+                      >
+                        {mismatchMessage ??
+                          formatTripDateRange(trip.startDate, trip.endDate)}
                       </Text>
                     </View>
-                    {added && <Text style={styles.addedText}>Added</Text>}
+                    {added ? (
+                      <Text style={styles.addedText}>Added</Text>
+                    ) : incompatible ? (
+                      <Text style={styles.unavailableText}>Unavailable</Text>
+                    ) : null}
                   </TouchableOpacity>
                 );
               })
@@ -480,6 +585,12 @@ const styles = StyleSheet.create({
     height: "100%",
   },
 
+  heroImageFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEE9FF",
+  },
+
   heroControls: {
     position: "absolute",
 
@@ -570,6 +681,24 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 15,
     color: "#65558E",
+  },
+
+  liveNotice: {
+    marginTop: 16,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#ECF7F0",
+  },
+
+  liveNoticeText: {
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 15,
+    color: "#3C6E50",
   },
 
   infoGrid: {
@@ -761,6 +890,14 @@ const styles = StyleSheet.create({
     color: "#111111",
   },
 
+  attribution: {
+    marginTop: 12,
+    fontSize: 9,
+    lineHeight: 14,
+    textAlign: "center",
+    color: "#8A838D",
+  },
+
   modalRoot: {
     flex: 1,
     justifyContent: "flex-end",
@@ -811,6 +948,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  tripOptionDisabled: {
+    opacity: 0.7,
+  },
+
   radio: {
     width: 23,
     height: 23,
@@ -826,6 +967,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#765FD2",
   },
 
+  radioDisabled: {
+    borderColor: "#D2CCD5",
+    backgroundColor: "#F1EEF2",
+  },
+
   tripOptionBody: {
     flex: 1,
     marginLeft: 12,
@@ -837,16 +983,30 @@ const styles = StyleSheet.create({
     color: "#1D1920",
   },
 
+  tripOptionCityDisabled: {
+    color: "#777079",
+  },
+
   tripOptionDates: {
     marginTop: 3,
     fontSize: 10,
     color: "#827A86",
   },
 
+  tripOptionMismatch: {
+    color: "#9A6267",
+  },
+
   addedText: {
     fontSize: 10,
     fontWeight: "700",
     color: "#765FD2",
+  },
+
+  unavailableText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#9A6267",
   },
 
   noTripsCard: {

@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,15 +15,29 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import StackScreenHeader from "../components/profile/StackScreenHeader";
 import TripForm from "../components/profile/TripForm";
 import { useTravelData } from "../context/TravelDataContext";
+import { placeCatalog } from "../data/placeCatalog";
 import type { CreateTripInput } from "../models/travel";
 import type { ProfileStackParamList } from "../navigation/navigationTypes";
+import { placeTripMismatchMessage } from "../utils/placeCompatibility";
 
 type Props = NativeStackScreenProps<ProfileStackParamList, "AddTrip">;
 
 export default function AddTripScreen({ navigation, route }: Props) {
-  const { trips, addTrip, updateTrip, setTripSelectedPlaceIds } = useTravelData();
+  const {
+    trips,
+    customPlaces,
+    livePlaces,
+    addTrip,
+    updateTrip,
+    setTripSelectedPlaceIds,
+  } = useTravelData();
   const tripId = route.params?.tripId;
   const initialPlaceId = route.params?.initialPlaceId;
+  const initialPlace = initialPlaceId
+    ? [...placeCatalog, ...customPlaces, ...livePlaces].find(
+        (place) => place.id === initialPlaceId
+      )
+    : undefined;
   const existingTrip = tripId
     ? trips.find((trip) => trip.id === tripId)
     : undefined;
@@ -32,6 +47,18 @@ export default function AddTripScreen({ navigation, route }: Props) {
       updateTrip(existingTrip.id, input);
       navigation.goBack();
       return;
+    }
+
+    if (initialPlace) {
+      const mismatchMessage = placeTripMismatchMessage(initialPlace, input);
+
+      if (mismatchMessage) {
+        Alert.alert(
+          "Different destination",
+          `${initialPlace.name} is in ${initialPlace.city}, ${initialPlace.country}. ${mismatchMessage}`
+        );
+        return;
+      }
     }
 
     const trip = addTrip(input);

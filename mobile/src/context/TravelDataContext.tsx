@@ -9,6 +9,10 @@ import React, {
 
 import { createInitialTravelData } from "../data/initialTravelData";
 import {
+  normalizePackingItems,
+} from "../data/packingChecklist";
+import { placeCatalog } from "../data/placeCatalog";
+import {
   findCountryMetadataByName,
   getCountryMetadata,
   normalizeCountryCode,
@@ -34,6 +38,7 @@ import {
   asyncTravelStorage,
   type TravelStorage,
 } from "../storage/travelStorage";
+import { isPlaceInTripDestination } from "../utils/placeCompatibility";
 
 type AddDreamCountryResult =
   | "added"
@@ -63,6 +68,7 @@ type TravelDataContextType = {
   trips: Trip[];
   flights: Flight[];
   customPlaces: Place[];
+  livePlaces: Place[];
   visitedCountries: CountryVisit[];
   visitedCities: CityVisit[];
   visitedCountryCodes: string[];
@@ -82,8 +88,13 @@ type TravelDataContextType = {
     unscheduledPlaceReasons?: Partial<Record<string, UnscheduledPlaceReason>>
   ) => void;
   setTripPriorityPlaceIds: (id: string, placeIds: string[]) => void;
+  toggleTripPackingItem: (tripId: string, itemId: string) => void;
+  addTripPackingItem: (tripId: string, label: string) => void;
+  deleteTripPackingItem: (tripId: string, itemId: string) => void;
+  resetTripPackingChecklist: (tripId: string) => void;
   addCustomPlace: (input: CreatePlaceInput) => Place;
   deleteCustomPlace: (id: string) => void;
+  cacheLivePlaces: (places: Place[]) => void;
   addFlight: (input: CreateFlightInput) => Flight;
   updateFlight: (id: string, input: UpdateFlightInput) => void;
   deleteFlight: (id: string) => void;
@@ -124,12 +135,13 @@ const tripStatuses = new Set<Trip["status"]>([
 function normalizeStoredTrip(trip: Partial<Trip>): Trip {
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
+  const id = trip.id ?? `trip-migrated-${Date.now()}`;
   const status = tripStatuses.has(trip.status ?? "planning")
     ? trip.status ?? "planning"
     : "planning";
 
   return {
-    id: trip.id ?? `trip-migrated-${Date.now()}`,
+    id,
     destinationCity: trip.destinationCity?.trim() || "Untitled trip",
     destinationCountry: trip.destinationCountry?.trim() || "",
     startDate: trip.startDate?.trim() || today,
@@ -157,6 +169,7 @@ function normalizeStoredTrip(trip: Partial<Trip>): Trip {
         ? trip.unscheduledPlaceReasons
         : {},
     routeDays: Array.isArray(trip.routeDays) ? trip.routeDays : undefined,
+    packingItems: normalizePackingItems(trip.packingItems, id),
     notes: trimmedOptional(trip.notes),
     flightIds: Array.isArray(trip.flightIds) ? trip.flightIds : [],
     createdAt: trip.createdAt ?? now,
@@ -227,7 +240,7 @@ function migrateTravelData(value: unknown): TravelData {
     .filter((trip) => trip.status === "completed")
     .map(migrateLegacyTripToHistory);
 
-  return {
+  const migratedData: TravelData = {
     countryVisits: Array.isArray(storedData.countryVisits)
       ? storedData.countryVisits
       : fallback.countryVisits,
@@ -257,13 +270,72 @@ function migrateTravelData(value: unknown): TravelData {
     customPlaces: Array.isArray(storedData.customPlaces)
       ? storedData.customPlaces
       : fallback.customPlaces,
+    livePlaces: Array.isArray(storedData.livePlaces)
+      ? storedData.livePlaces.filter((place) => place.source === "live")
+      : fallback.livePlaces,
   };
+
+  return sanitizeTravelDataPlaceSelections(migratedData);
 }
 
 function trimmedOptional(value: string | undefined) {
   const trimmed = value?.trim();
 
   return trimmed || undefined;
+}
+
+function compatiblePlaceIds(
+  data: TravelData,
+  trip: Trip,
+  placeIds: string[]
+) {
+  const placesById = new Map(
+    [...placeCatalog, ...data.customPlaces, ...data.livePlaces].map((place) => [
+      place.id,
+      place,
+    ])
+  );
+
+  return Array.from(new Set(placeIds)).filter((placeId) => {
+    const place = placesById.get(placeId);
+
+    return place ? isPlaceInTripDestination(place, trip) : false;
+  });
+}
+
+function sanitizeTravelDataPlaceSelections(data: TravelData): TravelData {
+  let changed = false;
+  const upcomingTrips = data.upcomingTrips.map((trip) => {
+    const selectedPlaceIds = compatiblePlaceIds(
+      data,
+      trip,
+      trip.selectedPlaceIds
+    );
+
+    if (selectedPlaceIds.length === trip.selectedPlaceIds.length) return trip;
+
+    changed = true;
+    const selectedIdSet = new Set(selectedPlaceIds);
+
+    return {
+      ...trip,
+      selectedPlaceIds,
+      priorityPlaceIds: trip.priorityPlaceIds.filter((placeId) =>
+        selectedIdSet.has(placeId)
+      ),
+      unscheduledPlaceIds: trip.unscheduledPlaceIds.filter((placeId) =>
+        selectedIdSet.has(placeId)
+      ),
+      unscheduledPlaceReasons: Object.fromEntries(
+        Object.entries(trip.unscheduledPlaceReasons).filter(([placeId]) =>
+          selectedIdSet.has(placeId)
+        )
+      ),
+      routeDays: undefined,
+    };
+  });
+
+  return changed ? { ...data, upcomingTrips } : data;
 }
 
 function normalizeFlightInput(input: CreateFlightInput) {
@@ -516,7 +588,7 @@ export function TravelDataProvider({
           (input.maxTravelDistance !== undefined &&
             input.maxTravelDistance !== trip.maxTravelDistance);
 
-        return normalizeStoredTrip({
+        const nextTrip = normalizeStoredTrip({
           ...trip,
           ...input,
           id: trip.id,
@@ -533,30 +605,50 @@ export function TravelDataProvider({
           createdAt: trip.createdAt,
           updatedAt: new Date().toISOString(),
         });
+
+        if (!routeSettingsChanged) return nextTrip;
+
+        const selectedPlaceIds = compatiblePlaceIds(
+          current,
+          nextTrip,
+          nextTrip.selectedPlaceIds
+        );
+
+        return {
+          ...nextTrip,
+          selectedPlaceIds,
+          priorityPlaceIds: nextTrip.priorityPlaceIds.filter((placeId) =>
+            selectedPlaceIds.includes(placeId)
+          ),
+        };
       }),
     }));
   }
 
   function setTripSelectedPlaceIds(id: string, placeIds: string[]) {
-    const selectedPlaceIds = Array.from(new Set(placeIds));
-
     setTravelData((current) => ({
       ...current,
-      upcomingTrips: current.upcomingTrips.map((trip) =>
-        trip.id === id
-          ? {
-              ...trip,
-              selectedPlaceIds,
-              priorityPlaceIds: trip.priorityPlaceIds.filter((placeId) =>
-                selectedPlaceIds.includes(placeId)
-              ),
-              unscheduledPlaceIds: [],
-              unscheduledPlaceReasons: {},
-              routeDays: undefined,
-              updatedAt: new Date().toISOString(),
-            }
-          : trip
-      ),
+      upcomingTrips: current.upcomingTrips.map((trip) => {
+        if (trip.id !== id) return trip;
+
+        const selectedPlaceIds = compatiblePlaceIds(
+          current,
+          trip,
+          placeIds
+        );
+
+        return {
+          ...trip,
+          selectedPlaceIds,
+          priorityPlaceIds: trip.priorityPlaceIds.filter((placeId) =>
+            selectedPlaceIds.includes(placeId)
+          ),
+          unscheduledPlaceIds: [],
+          unscheduledPlaceReasons: {},
+          routeDays: undefined,
+          updatedAt: new Date().toISOString(),
+        };
+      }),
     }));
   }
 
@@ -597,6 +689,110 @@ export function TravelDataProvider({
               priorityPlaceIds: Array.from(new Set(placeIds)).filter(
                 (placeId) => trip.selectedPlaceIds.includes(placeId)
               ),
+              updatedAt: new Date().toISOString(),
+            }
+          : trip
+      ),
+    }));
+  }
+
+  function toggleTripPackingItem(tripId: string, itemId: string) {
+    setTravelData((current) => ({
+      ...current,
+      upcomingTrips: current.upcomingTrips.map((trip) =>
+        trip.id === tripId
+          ? {
+              ...trip,
+              packingItems: normalizePackingItems(
+                trip.packingItems,
+                trip.id
+              ).map((item) =>
+                item.id === itemId
+                  ? { ...item, isPacked: !item.isPacked }
+                  : item
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          : trip
+      ),
+    }));
+  }
+
+  function addTripPackingItem(tripId: string, label: string) {
+    const trimmedLabel = label.trim().slice(0, 80);
+    if (!trimmedLabel) return;
+
+    setTravelData((current) => ({
+      ...current,
+      upcomingTrips: current.upcomingTrips.map((trip) => {
+        if (trip.id !== tripId) return trip;
+
+        const packingItems = normalizePackingItems(
+          trip.packingItems,
+          trip.id
+        );
+        const duplicate = packingItems.some(
+          (item) =>
+            item.label.trim().toLocaleLowerCase() ===
+            trimmedLabel.toLocaleLowerCase()
+        );
+        if (duplicate) return trip;
+
+        return {
+          ...trip,
+          packingItems: [
+            ...packingItems,
+            {
+              id: `packing-${trip.id}-${Date.now()}-${Math.random()
+                .toString(36)
+                .slice(2, 7)}`,
+              label: trimmedLabel,
+              category: "other",
+              isPacked: false,
+              isDefault: false,
+            },
+          ],
+          updatedAt: new Date().toISOString(),
+        };
+      }),
+    }));
+  }
+
+  function deleteTripPackingItem(tripId: string, itemId: string) {
+    setTravelData((current) => ({
+      ...current,
+      upcomingTrips: current.upcomingTrips.map((trip) => {
+        if (trip.id !== tripId) return trip;
+
+        const packingItems = normalizePackingItems(
+          trip.packingItems,
+          trip.id
+        );
+        const item = packingItems.find((entry) => entry.id === itemId);
+        if (!item || item.isDefault) return trip;
+
+        return {
+          ...trip,
+          packingItems: packingItems.filter(
+            (entry) => entry.id !== itemId
+          ),
+          updatedAt: new Date().toISOString(),
+        };
+      }),
+    }));
+  }
+
+  function resetTripPackingChecklist(tripId: string) {
+    setTravelData((current) => ({
+      ...current,
+      upcomingTrips: current.upcomingTrips.map((trip) =>
+        trip.id === tripId
+          ? {
+              ...trip,
+              packingItems: normalizePackingItems(
+                trip.packingItems,
+                trip.id
+              ).map((item) => ({ ...item, isPacked: false })),
               updatedAt: new Date().toISOString(),
             }
           : trip
@@ -662,6 +858,24 @@ export function TravelDataProvider({
         };
       }),
     }));
+  }
+
+  function cacheLivePlaces(places: Place[]) {
+    const validPlaces = places.filter((place) => place.source === "live");
+    if (validPlaces.length === 0) return;
+
+    setTravelData((current) => {
+      const byId = new Map(
+        current.livePlaces.map((place) => [place.id, place])
+      );
+
+      validPlaces.forEach((place) => byId.set(place.id, place));
+
+      return {
+        ...current,
+        livePlaces: Array.from(byId.values()).slice(-300),
+      };
+    });
   }
 
   function deleteTrip(id: string) {
@@ -749,6 +963,7 @@ export function TravelDataProvider({
         trips: travelData.upcomingTrips,
         flights: travelData.flights,
         customPlaces: travelData.customPlaces,
+        livePlaces: travelData.livePlaces,
         visitedCountries: travelData.countryVisits,
         visitedCities: travelData.cityVisits,
         visitedCountryCodes,
@@ -763,8 +978,13 @@ export function TravelDataProvider({
         setTripSelectedPlaceIds,
         setTripRoutePlan,
         setTripPriorityPlaceIds,
+        toggleTripPackingItem,
+        addTripPackingItem,
+        deleteTripPackingItem,
+        resetTripPackingChecklist,
         addCustomPlace,
         deleteCustomPlace,
+        cacheLivePlaces,
         addFlight,
         updateFlight,
         deleteFlight,

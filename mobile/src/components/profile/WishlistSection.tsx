@@ -11,7 +11,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { useWishlist } from "../../context/WishlistContext";
+import { useTravelData } from "../../context/TravelDataContext";
 import { discoverItems } from "../../data/discoverItems";
+import { placeToDiscoverItem } from "../../data/placeCatalog";
 import ProfileSectionHeader from "./ProfileSectionHeader";
 
 export default function WishlistSection({
@@ -20,7 +22,12 @@ export default function WishlistSection({
   onOpenItem: (itemId: string) => void;
 }) {
   const { wishlist, removeFromWishlist } = useWishlist();
-  const items = discoverItems.filter((item) => wishlist.includes(item.id));
+  const { livePlaces } = useTravelData();
+  const items = [...discoverItems, ...livePlaces.map(placeToDiscoverItem)].filter(
+    (item, index, allItems) =>
+      wishlist.includes(item.id) &&
+      allItems.findIndex((candidate) => candidate.id === item.id) === index
+  );
 
   return (
     <>
@@ -52,7 +59,13 @@ export default function WishlistSection({
                 accessibilityRole="button"
                 accessibilityLabel={`Open ${item.title}`}
               >
-                <Image source={{ uri: item.image }} style={styles.image} />
+                {item.image ? (
+                  <Image source={{ uri: item.image }} style={styles.image} />
+                ) : (
+                  <View style={[styles.image, styles.imageFallback]}>
+                    <Ionicons name="location-outline" size={28} color="#765FD2" />
+                  </View>
+                )}
                 <View style={styles.categoryBadge}>
                   <Text style={styles.category}>{item.category.toUpperCase()}</Text>
                 </View>
@@ -100,6 +113,7 @@ const styles = StyleSheet.create({
   },
   cardLink: { flex: 1 },
   image: { width: "100%", height: 118, backgroundColor: "#EEEEEE" },
+  imageFallback: { alignItems: "center", justifyContent: "center", backgroundColor: "#EEE9FF" },
   categoryBadge: {
     position: "absolute",
     top: 9,

@@ -6,6 +6,7 @@ import AddFlightScreen from "../screens/AddFlightScreen";
 import AddTripScreen from "../screens/AddTripScreen";
 import AddCustomPlaceScreen from "../screens/AddCustomPlaceScreen";
 import FlightDetailScreen from "../screens/FlightDetailScreen";
+import PackingChecklistScreen from "../screens/PackingChecklistScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import TripDetailScreen from "../screens/TripDetailScreen";
 import TripPlacesScreen from "../screens/TripPlacesScreen";
@@ -36,6 +37,10 @@ export default function ProfileStack() {
       <Stack.Screen
         name="TripPlaces"
         component={TripPlacesScreen}
+      />
+      <Stack.Screen
+        name="PackingChecklist"
+        component={PackingChecklistScreen}
       />
       <Stack.Screen
         name="AddCustomPlace"

@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +20,10 @@ import worldGeoJson from "../data/world.json";
 import { useTravelStatistics } from "../hooks/useTravelStatistics";
 import type { RootTabParamList } from "../navigation/navigationTypes";
 import type { AiRouteLength } from "../services/aiRouteRecommendations";
+import {
+  searchLocations,
+  type LocationSearchResult,
+} from "../services/locationSearch";
 
 type Props = BottomTabScreenProps<RootTabParamList, "Home">;
 
@@ -106,6 +111,7 @@ const destinations: RandomDestination[] = Array.from(
 export default function HomeScreen({ navigation }: Props) {
   const screenScrollRef = useRef<ScrollView>(null);
   const mapOffsetRef = useRef(0);
+  const mapSearchRequestRef = useRef(0);
   const {
     travelData,
     visitedCountryCodes,
@@ -118,6 +124,75 @@ export default function HomeScreen({ navigation }: Props) {
 
   const [randomDestination, setRandomDestination] =
     useState<RandomDestination | null>(null);
+  const [mapSearchQuery, setMapSearchQuery] = useState("");
+  const [mapSearchResults, setMapSearchResults] = useState<
+    LocationSearchResult[]
+  >([]);
+  const [selectedMapLocation, setSelectedMapLocation] =
+    useState<LocationSearchResult | null>(null);
+  const [mapSearchLoading, setMapSearchLoading] = useState(false);
+  const [mapSearchError, setMapSearchError] = useState<string | null>(null);
+
+  function selectMapLocation(location: LocationSearchResult) {
+    setSelectedMapLocation(location);
+    setRandomDestination(null);
+    setTimeout(() => {
+      screenScrollRef.current?.scrollTo({
+        y: Math.max(0, mapOffsetRef.current - 12),
+        animated: true,
+      });
+    }, 100);
+  }
+
+  async function submitMapSearch() {
+    const query = mapSearchQuery.trim();
+    if (query.length < 2) {
+      setMapSearchError("Enter a country, city, address or place name.");
+      return;
+    }
+
+    const requestId = mapSearchRequestRef.current + 1;
+    mapSearchRequestRef.current = requestId;
+    setMapSearchLoading(true);
+    setMapSearchError(null);
+
+    try {
+      const locations = await searchLocations(query, selectedMapLocation);
+      if (mapSearchRequestRef.current !== requestId) return;
+
+      setMapSearchResults(locations);
+      if (locations.length > 0) {
+        selectMapLocation(locations[0]);
+      } else {
+        setSelectedMapLocation(null);
+        setMapSearchError(
+          "No matching point found. Add a city or country to make the query more specific."
+        );
+      }
+    } catch (error) {
+      if (mapSearchRequestRef.current !== requestId) return;
+
+      setMapSearchResults([]);
+      setMapSearchError(
+        error instanceof Error ? error.message : "Could not search the map."
+      );
+    } finally {
+      if (mapSearchRequestRef.current === requestId) {
+        setMapSearchLoading(false);
+      }
+    }
+  }
+
+  function changeMapSearch(value: string) {
+    setMapSearchQuery(value);
+    if (value.trim()) return;
+
+    mapSearchRequestRef.current += 1;
+    setMapSearchResults([]);
+    setSelectedMapLocation(null);
+    setMapSearchError(null);
+    setMapSearchLoading(false);
+  }
 
   function chooseRandomDestination() {
     const availableDestinations = randomDestination
@@ -133,6 +208,7 @@ export default function HomeScreen({ navigation }: Props) {
 
     const nextDestination = availableDestinations[index];
 
+    setSelectedMapLocation(null);
     setRandomDestination(nextDestination);
     screenScrollRef.current?.scrollTo({
       y: mapOffsetRef.current,
@@ -155,23 +231,6 @@ export default function HomeScreen({ navigation }: Props) {
       >
         <Text style={styles.logo}>ODYSSEUS</Text>
 
-        <View
-          onLayout={(event) => {
-            mapOffsetRef.current =
-              event.nativeEvent.layout.y;
-          }}
-        >
-          <WorldMap
-            visitedCountries={visitedCountryCodes}
-            plannedCountries={dreamCountryCodes}
-            onVisitedCountriesChange={setVisitedCountryCodes}
-            onPlannedCountriesChange={setDreamCountryCodes}
-            focusedCountryName={randomDestination?.country}
-          />
-        </View>
-
-        <StatsCarousel statistics={statistics} />
-
         <Text style={styles.question}>
           Where will your next journey be?
         </Text>
@@ -184,12 +243,111 @@ export default function HomeScreen({ navigation }: Props) {
           />
 
           <TextInput
+            value={mapSearchQuery}
+            onChangeText={changeMapSearch}
+            onSubmitEditing={() => void submitMapSearch()}
             style={styles.searchInput}
-            placeholder="Search city or country..."
+            placeholder="Country, city, address or café..."
             placeholderTextColor="#999999"
             selectionColor="#000000"
+            returnKeyType="search"
+            autoCorrect={false}
+          />
+
+          {mapSearchLoading ? (
+            <ActivityIndicator size="small" color="#765FD2" />
+          ) : (
+            <TouchableOpacity
+              style={styles.searchAction}
+              onPress={() => void submitMapSearch()}
+              accessibilityRole="button"
+              accessibilityLabel="Search on map"
+            >
+              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {mapSearchError && (
+          <View style={styles.searchMessage}>
+            <Ionicons name="information-circle-outline" size={16} color="#A15359" />
+            <Text style={styles.searchError}>{mapSearchError}</Text>
+          </View>
+        )}
+
+        {mapSearchResults.length > 0 && (
+          <View style={styles.searchResults}>
+            {mapSearchResults.map((location) => {
+              const selected = selectedMapLocation?.id === location.id;
+              const locationContext = [location.type, location.city, location.country]
+                .filter(
+                  (value, index, values) =>
+                    value && values.indexOf(value) === index
+                )
+                .join(" · ");
+
+              return (
+                <TouchableOpacity
+                  key={location.id}
+                  style={[
+                    styles.searchResult,
+                    selected && styles.searchResultSelected,
+                  ]}
+                  onPress={() => selectMapLocation(location)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show ${location.name} on map`}
+                >
+                  <View
+                    style={[
+                      styles.resultPin,
+                      selected && styles.resultPinSelected,
+                    ]}
+                  >
+                    <Ionicons
+                      name="location-sharp"
+                      size={16}
+                      color={selected ? "#FFFFFF" : "#765FD2"}
+                    />
+                  </View>
+                  <View style={styles.resultBody}>
+                    <Text style={styles.resultName} numberOfLines={1}>
+                      {location.name}
+                    </Text>
+                    <Text style={styles.resultMeta} numberOfLines={1}>
+                      {locationContext}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name={selected ? "checkmark-circle" : "locate-outline"}
+                    size={18}
+                    color={selected ? "#765FD2" : "#8C8490"}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+            <Text style={styles.searchAttribution}>
+              Search results © OpenStreetMap contributors
+            </Text>
+          </View>
+        )}
+
+        <View
+          onLayout={(event) => {
+            mapOffsetRef.current =
+              event.nativeEvent.layout.y;
+          }}
+        >
+          <WorldMap
+            visitedCountries={visitedCountryCodes}
+            plannedCountries={dreamCountryCodes}
+            onVisitedCountriesChange={setVisitedCountryCodes}
+            onPlannedCountriesChange={setDreamCountryCodes}
+            focusedCountryName={randomDestination?.country}
+            focusedLocation={selectedMapLocation}
           />
         </View>
+
+        <StatsCarousel statistics={statistics} />
 
         <TouchableOpacity
           style={styles.randomButton}
@@ -365,7 +523,7 @@ const styles = StyleSheet.create({
   },
 
   question: {
-    marginTop: 28,
+    marginTop: 0,
     marginBottom: 16,
     fontSize: 27,
     lineHeight: 33,
@@ -390,6 +548,96 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 16,
     color: "#111111",
+  },
+
+  searchAction: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#765FD2",
+  },
+
+  searchMessage: {
+    marginTop: 8,
+    borderRadius: 13,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    backgroundColor: "#FFF4F4",
+  },
+
+  searchError: {
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 15,
+    color: "#A15359",
+  },
+
+  searchResults: {
+    marginTop: 9,
+    marginBottom: 12,
+    overflow: "hidden",
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "#E5E0EA",
+    backgroundColor: "#FFFFFF",
+  },
+
+  searchResult: {
+    minHeight: 57,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEEAF1",
+    paddingHorizontal: 11,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  searchResultSelected: {
+    backgroundColor: "#F4F0FF",
+  },
+
+  resultPin: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEE9FF",
+  },
+
+  resultPinSelected: {
+    backgroundColor: "#765FD2",
+  },
+
+  resultBody: {
+    flex: 1,
+    marginLeft: 10,
+    paddingRight: 8,
+  },
+
+  resultName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1D1920",
+  },
+
+  resultMeta: {
+    marginTop: 3,
+    fontSize: 9,
+    textTransform: "capitalize",
+    color: "#81798A",
+  },
+
+  searchAttribution: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    fontSize: 8,
+    textAlign: "right",
+    color: "#938B98",
   },
 
   randomButton: {

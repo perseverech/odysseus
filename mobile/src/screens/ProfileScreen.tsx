@@ -8,13 +8,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import DreamCountriesSection from "../components/profile/DreamCountriesSection";
 import FlightsSection from "../components/profile/FlightsSection";
+import PackingListsSection from "../components/profile/PackingListsSection";
 import ProfileFooter from "../components/profile/ProfileFooter";
 import ProfileHero from "../components/profile/ProfileHero";
 import TravelStatsSection from "../components/profile/TravelStatsSection";
 import UpcomingTripsSection from "../components/profile/UpcomingTripsSection";
 import WishlistSection from "../components/profile/WishlistSection";
 import { useWishlist } from "../context/WishlistContext";
-import { discoverItems } from "../data/discoverItems";
 import { useTravelStatistics } from "../hooks/useTravelStatistics";
 import type {
   ProfileStackParamList,
@@ -28,9 +28,7 @@ type Props = CompositeScreenProps<
 
 export default function ProfileScreen({ navigation }: Props) {
   const { wishlist } = useWishlist();
-  const wishlistItemCount = discoverItems.filter((item) =>
-    wishlist.includes(item.id)
-  ).length;
+  const wishlistItemCount = wishlist.length;
   const statistics = useTravelStatistics(wishlistItemCount);
 
   return (
@@ -54,6 +52,11 @@ export default function ProfileScreen({ navigation }: Props) {
           onAddTrip={() => navigation.navigate("AddTrip")}
           onOpenTrip={(tripId) =>
             navigation.navigate("TripDetail", { tripId })
+          }
+        />
+        <PackingListsSection
+          onOpenChecklist={(tripId) =>
+            navigation.navigate("PackingChecklist", { tripId })
           }
         />
         <FlightsSection

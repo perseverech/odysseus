@@ -6,6 +6,7 @@ import React, {
 } from "react";
 import {
   Animated,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -24,7 +25,6 @@ import {
   type LngLat,
   Map,
   type MapProps,
-  type StyleSpecification,
 } from "@maplibre/maplibre-react-native";
 
 import worldGeoJson from "../data/world.json";
@@ -32,6 +32,10 @@ import {
   getMapCountryId,
   normalizeCountryName,
 } from "../data/travelCatalog";
+import {
+  getLocationFocusZoom,
+  type LocationSearchResult,
+} from "../services/locationSearch";
 const sourceWorldData =
   worldGeoJson as unknown as CountryMapData;
 
@@ -41,6 +45,7 @@ type Props = {
   onVisitedCountriesChange: (countries: string[]) => void;
   onPlannedCountriesChange: (countries: string[]) => void;
   focusedCountryName?: string;
+  focusedLocation?: LocationSearchResult | null;
 };
 
 type SelectedCountry = {
@@ -105,21 +110,9 @@ const WATER_COLOR = "#EAF4FB";
 const LAND_COLOR = "#FFFFFF";
 const MAP_BORDER_COLOR = "#C9B29B";
 
-const MAP_STYLE: StyleSpecification = {
-  version: 8,
-  glyphs:
-    "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-  sources: {},
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: {
-        "background-color": WATER_COLOR,
-      },
-    },
-  ],
-};
+const MAP_STYLE =
+  process.env.EXPO_PUBLIC_MAP_STYLE_URL ??
+  "https://demotiles.maplibre.org/style.json";
 
 const SELECTED_COLOR = "#A8DADC";
 const VISITED_COLOR = "#A78BFA";
@@ -398,12 +391,14 @@ export default function WorldMap({
   onVisitedCountriesChange,
   onPlannedCountriesChange,
   focusedCountryName,
+  focusedLocation,
 }: Props) {
   const [selectedCountry, setSelectedCountry] =
     useState<SelectedCountry>(null);
   const zoomRef = useRef(INITIAL_ZOOM);
   const cameraRef = useRef<CameraRef>(null);
   const pinDrop = useRef(new Animated.Value(0)).current;
+  const locationPinDrop = useRef(new Animated.Value(0)).current;
 
   const normalizedVisited = useMemo(
     () => visitedCountries.map((id) => id.toLowerCase()),
@@ -546,9 +541,35 @@ export default function WorldMap({
     return () => pinAnimation.stop();
   }, [countriesWithBounds, focusedCountryName, pinDrop]);
 
+  useEffect(() => {
+    if (!focusedLocation) return;
+
+    setSelectedCountry(null);
+    cameraRef.current?.flyTo({
+      center: [focusedLocation.longitude, focusedLocation.latitude],
+      zoom: getLocationFocusZoom(focusedLocation),
+      duration: 1050,
+    });
+
+    locationPinDrop.stopAnimation();
+    locationPinDrop.setValue(0);
+    const animation = Animated.spring(locationPinDrop, {
+      toValue: 1,
+      damping: 11,
+      stiffness: 145,
+      mass: 0.8,
+      useNativeDriver: true,
+    });
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [focusedLocation, locationPinDrop]);
+
   const showFocusedCountryPin =
     selectedCountry !== null &&
     focusedCountryName !== undefined &&
+    !focusedLocation &&
     normalizeCountryName(selectedCountry.name) ===
       normalizeCountryName(focusedCountryName);
 
@@ -744,6 +765,45 @@ export default function WorldMap({
             </Marker>
           )}
 
+          {focusedLocation && (
+            <Marker
+              id="map-search-result-pin"
+              lngLat={[focusedLocation.longitude, focusedLocation.latitude]}
+              anchor="bottom"
+            >
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.locationMarker,
+                  {
+                    opacity: locationPinDrop,
+                    transform: [
+                      {
+                        translateY: locationPinDrop.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [-80, 0],
+                        }),
+                      },
+                      {
+                        scale: locationPinDrop.interpolate({
+                          inputRange: [0, 0.75, 1],
+                          outputRange: [0.65, 1.08, 1],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <View style={styles.locationLabel}>
+                  <Text style={styles.locationLabelText} numberOfLines={1}>
+                    {focusedLocation.name}
+                  </Text>
+                </View>
+                <Ionicons name="location-sharp" size={30} color="#E53935" />
+              </Animated.View>
+            </Marker>
+          )}
+
           <GeoJSONSource
             data={mapData}
           >
@@ -775,26 +835,15 @@ export default function WorldMap({
                 ],
 
                 "fill-opacity": [
-                  "case",
-                  [
-                    "in",
-                    ["get", "countryId"],
-                    ["literal", normalizedVisited],
-                  ],
-                  0.78,
-                  [
-                    "in",
-                    ["get", "countryId"],
-                    ["literal", normalizedPlanned],
-                  ],
-                  0.8,
-                  [
-                    "==",
-                    ["get", "countryId"],
-                    selectedCountryId,
-                  ],
-                  0.68,
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
                   1,
+                  0.85,
+                  5,
+                  0.32,
+                  8,
+                  0,
                 ],
               }}
             />
@@ -805,6 +854,17 @@ export default function WorldMap({
               paint={{
                 "line-color": "rgba(95,95,105,0.28)",
                 "line-width": 0.9,
+                "line-opacity": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  1,
+                  1,
+                  6,
+                  0.25,
+                  8,
+                  0,
+                ],
               }}
             />
 
@@ -874,6 +934,19 @@ export default function WorldMap({
           {plannedCountries.length} planned
         </Text>
       </View>
+
+      <TouchableOpacity
+        style={styles.mapAttribution}
+        onPress={() =>
+          void Linking.openURL("https://www.openstreetmap.org/copyright")
+        }
+        accessibilityRole="link"
+        accessibilityLabel="OpenStreetMap copyright and attribution"
+      >
+        <Text style={styles.attributionText}>
+          Search and map data © OpenStreetMap contributors
+        </Text>
+      </TouchableOpacity>
 
       {selectedCountry && (
         <View style={styles.countryCard}>
@@ -983,6 +1056,28 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
 
+  locationMarker: {
+    maxWidth: 190,
+    alignItems: "center",
+  },
+
+  locationLabel: {
+    maxWidth: 190,
+    marginBottom: 2,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "rgba(17,17,17,0.12)",
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    backgroundColor: "rgba(255,255,255,0.96)",
+  },
+
+  locationLabelText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#111111",
+  },
+
   mapFooter: {
     marginTop: 9,
     flexDirection: "row",
@@ -1020,6 +1115,17 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     color: "#777777",
+  },
+
+  mapAttribution: {
+    alignSelf: "flex-end",
+    marginTop: 5,
+  },
+
+  attributionText: {
+    fontSize: 8,
+    color: "#8D8691",
+    textDecorationLine: "underline",
   },
 
   countryCard: {

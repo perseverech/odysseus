@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import StackScreenHeader from "../components/profile/StackScreenHeader";
 import { useTravelData } from "../context/TravelDataContext";
 import type { ProfileStackParamList } from "../navigation/navigationTypes";
+import { placeTripMismatchMessage } from "../utils/placeCompatibility";
 
 type Props = NativeStackScreenProps<ProfileStackParamList, "AddCustomPlace">;
 
@@ -83,6 +84,12 @@ export default function AddCustomPlaceScreen({ route, navigation }: Props) {
 
     if (!form.name.trim() || !form.city.trim() || !form.country.trim()) {
       setError("Name, city and country are required.");
+      return;
+    }
+
+    const mismatchMessage = placeTripMismatchMessage(form, trip);
+    if (mismatchMessage) {
+      setError(mismatchMessage);
       return;
     }
 
